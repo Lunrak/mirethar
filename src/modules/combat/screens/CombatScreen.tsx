@@ -1,168 +1,243 @@
 /**
- * Pantalla de combate – layout landscape exacto del GDD §5.1
- * Solo estructura estática (sin lógica de juego todavía).
- *
- * Zonas:
- *  - Header (superior)
- *  - Zona Izquierda ~28% (acciones)
- *  - Campo de Batalla (centro)
- *  - Panel Derecho ~22% (info)
- *  - Log de Combate (inferior)
- *  - Dado Central (esquina inferior derecha, superpuesto)
+ * Pantalla de combate – layout GDD §5.1 + Dado Central conectado (Día 16)
+ * Idle → Listo → Girando → Resultado
  */
 
-import React from 'react';
-import { View, Text, StyleSheet, ScrollView } from 'react-native';
+import React, { useEffect, useRef } from 'react';
+import { View, Text, StyleSheet, ScrollView, Pressable } from 'react-native';
+import { useCombatSession } from '../hooks/useCombatSession';
+import { CentralDice } from '../components/CentralDice';
+import { getAliveEnemies } from '../../../core/rules/TurnManager';
+import { getHeroStatus } from '../../../core/rules/HeroStatus';
+import type { Action } from '../../../core/types/combat';
 
-const PLACEHOLDER_ACTIONS = ['Attack', 'Defend', 'Heal', 'Spell', 'Flee'];
-const PLACEHOLDER_HEROES = ['Bruggo', 'Lira', 'Brother Tomas', 'Elandra'];
-const PLACEHOLDER_ENEMIES = ['Goblin', 'Goblin', 'Goblin', 'Goblin'];
-const PLACEHOLDER_LOG = [
-	'Combate iniciado',
-	'Turno de Bruggo',
-	'Bruggo ataca a Goblin: 5 vs 3 → ÉXITO (1 muerto)',
-	'Turno de Lira',
+const ACTIONS: Action[] = [
+	{ type: 'attack', name: 'Attack', requiresTarget: true },
+	{ type: 'defend', name: 'Defend', requiresTarget: false },
+	{ type: 'heal', name: 'Heal', requiresTarget: true },
+	{ type: 'spell', name: 'Fireball', requiresTarget: false },
 ];
 
 export default function CombatScreen() {
+	const session = useCombatSession('minion');
+	const {
+		state,
+		diceUi,
+		lastDiceTotal,
+		selectHeroAction,
+		selectEnemyTarget,
+		resolveDice,
+		acknowledgeResult,
+		canResolveNow,
+	} = session;
+
+	const spinTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+	useEffect(() => {
+		if (diceUi === 'result') {
+			spinTimeout.current = setTimeout(() => {
+				acknowledgeResult();
+			}, 1200);
+			return () => {
+				if (spinTimeout.current) clearTimeout(spinTimeout.current);
+			};
+		}
+	}, [diceUi, acknowledgeResult]);
+
+	const onDicePress = () => {
+		if (diceUi === 'ready') {
+			resolveDice();
+		} else if (diceUi === 'result') {
+			if (spinTimeout.current) clearTimeout(spinTimeout.current);
+			acknowledgeResult();
+		}
+	};
+
+	const currentHero = state.heroes.find((h) => h.id === state.currentActorId);
+	const selectedTarget = state.enemies.find(
+		(e) => e.id === state.selectedTargetId,
+	);
+	const aliveEnemies = getAliveEnemies(state.enemies);
+
+	const lifePct = (cur: number, max: number) =>
+		`${Math.max(0, Math.min(100, Math.round((cur / Math.max(1, max)) * 100)))}%`;
+
 	return (
 		<View style={styles.root}>
-			{/* ===== HEADER ===== */}
 			<View style={styles.header}>
 				<Text style={styles.headerTitle}>Combate</Text>
 				<Text style={styles.headerMeta}>
-					Ronda 1 · Turno: Bruggo · Fase: heroTurn
+					Ronda {state.round}
+					{currentHero ? `  ·  Turno: ${currentHero.name}` : ''}
+					{`  ·  ${state.phase}`}
+					{state.isFinished ? `  ·  ${state.result?.toUpperCase()}` : ''}
 				</Text>
 			</View>
 
-			{/* ===== CUERPO PRINCIPAL ===== */}
 			<View style={styles.body}>
-				{/* Zona Izquierda – Acciones (~28%) */}
 				<View style={styles.leftPanel}>
 					<Text style={styles.sectionLabel}>Acciones</Text>
-					{PLACEHOLDER_ACTIONS.map((action) => (
-						<View
-							key={action}
-							style={styles.actionButton}
-						>
-							<Text style={styles.actionButtonText}>{action}</Text>
-						</View>
-					))}
+					{ACTIONS.map((action) => {
+						const selected = state.selectedAction?.name === action.name;
+						const disabled =
+							state.phase !== 'heroTurn' ||
+							state.isFinished ||
+							diceUi === 'spinning';
+						return (
+							<Pressable
+								key={action.name}
+								disabled={disabled}
+								onPress={() => selectHeroAction(action)}
+								style={[
+									styles.actionButton,
+									selected && styles.actionSelected,
+									disabled && styles.actionDisabled,
+								]}
+							>
+								<Text style={styles.actionButtonText}>{action.name}</Text>
+							</Pressable>
+						);
+					})}
 				</View>
 
-				{/* Campo de Batalla – Centro */}
 				<View style={styles.battlefield}>
 					<Text style={styles.sectionLabel}>Campo de Batalla</Text>
 					<View style={styles.battlefieldRow}>
-						{/* Héroes (izquierda, orden de marcha vertical) */}
 						<View style={styles.unitColumn}>
 							<Text style={styles.columnTitle}>Héroes</Text>
-							{PLACEHOLDER_HEROES.map((name, i) => (
+							{state.heroes.map((h) => (
 								<View
-									key={name}
-									style={[styles.unitCard, i === 0 && styles.unitActive]}
+									key={h.id}
+									style={[
+										styles.unitCard,
+										h.id === state.currentActorId && styles.unitActive,
+										(h.isFallen || h.isDead) && styles.unitDown,
+									]}
 								>
-									<Text style={styles.unitName}>{name}</Text>
+									<Text style={styles.unitName}>
+										{h.name} · {getHeroStatus(h)}
+									</Text>
 									<View style={styles.lifeBarTrack}>
 										<View
 											style={[
 												styles.lifeBarFill,
-												{ width: `${[100, 75, 100, 60][i]}%` },
+												{ width: lifePct(h.life, h.maxLife) },
 											]}
 										/>
 									</View>
+									<Text style={styles.lifeText}>
+										{h.life}/{h.maxLife}
+									</Text>
 								</View>
 							))}
 						</View>
 
 						<Text style={styles.vs}>VS</Text>
 
-						{/* Enemigos (derecha) */}
 						<View style={styles.unitColumn}>
 							<Text style={styles.columnTitle}>Enemigos</Text>
-							{PLACEHOLDER_ENEMIES.map((name, i) => (
-								<View
-									key={`${name}-${i}`}
-									style={[
-										styles.unitCard,
-										styles.unitEnemy,
-										i === 0 && styles.unitTarget,
-									]}
-								>
-									<Text style={styles.unitName}>{name}</Text>
-									<View style={styles.lifeBarTrack}>
-										<View
-											style={[styles.lifeBarFillEnemy, { width: '100%' }]}
-										/>
-									</View>
-								</View>
-							))}
+							{state.enemies.map((e) => {
+								const dead = e.currentLife <= 0;
+								const targeted = e.id === state.selectedTargetId;
+								return (
+									<Pressable
+										key={e.id}
+										disabled={dead || state.phase !== 'heroTurn'}
+										onPress={() => selectEnemyTarget(e.id)}
+										style={[
+											styles.unitCard,
+											styles.unitEnemy,
+											targeted && styles.unitTarget,
+											dead && styles.unitDown,
+										]}
+									>
+										<Text style={styles.unitName}>{e.name}</Text>
+										<View style={styles.lifeBarTrack}>
+											<View
+												style={[
+													styles.lifeBarFillEnemy,
+													{
+														width: lifePct(
+															Math.max(0, e.currentLife),
+															Math.max(e.currentLife, 1),
+														),
+													},
+												]}
+											/>
+										</View>
+										<Text style={styles.lifeText}>
+											{e.currentLife} · L{e.level}
+										</Text>
+									</Pressable>
+								);
+							})}
+							{aliveEnemies.length === 0 && (
+								<Text style={styles.columnTitle}>Sin enemigos vivos</Text>
+							)}
 						</View>
 					</View>
 				</View>
 
-				{/* Panel Derecho – Info (~22%) */}
 				<View style={styles.rightPanel}>
 					<Text style={styles.sectionLabel}>Objetivo</Text>
-					<Text style={styles.infoName}>Goblin</Text>
-					<Text style={styles.infoLine}>Tipo: minion</Text>
-					<Text style={styles.infoLine}>Level / Defense: 3</Text>
-					<Text style={styles.infoLine}>Life: 1</Text>
-					<Text style={styles.infoLine}>Attacks: 1</Text>
-					<Text style={[styles.infoLine, styles.infoRules]}>
-						Special: 1 in 6 surprise · Dwarves +1
-					</Text>
+					{selectedTarget ? (
+						<>
+							<Text style={styles.infoName}>{selectedTarget.name}</Text>
+							<Text style={styles.infoLine}>
+								Level / Def: {selectedTarget.level}
+							</Text>
+							<Text style={styles.infoLine}>
+								Life: {selectedTarget.currentLife}
+							</Text>
+							<Text style={styles.infoLine}>
+								Attacks: {selectedTarget.attacks}
+							</Text>
+							{selectedTarget.isUndead && (
+								<Text style={styles.infoLine}>Undead</Text>
+							)}
+						</>
+					) : (
+						<Text style={styles.infoLine}>Selecciona un enemigo</Text>
+					)}
+					{state.selectedAction && (
+						<Text style={[styles.infoLine, { marginTop: 12 }]}>
+							Acción: {state.selectedAction.name}
+						</Text>
+					)}
+					{canResolveNow && (
+						<Text style={styles.readyHint}>Dado Listo — púlsalo</Text>
+					)}
 				</View>
 			</View>
 
-			{/* ===== LOG DE COMBATE ===== */}
 			<View style={styles.log}>
 				<Text style={styles.sectionLabel}>Log</Text>
-				<ScrollView
-					style={styles.logScroll}
-					horizontal={false}
-				>
-					{PLACEHOLDER_LOG.map((line, i) => (
+				<ScrollView style={styles.logScroll}>
+					{state.log.slice(-12).map((entry) => (
 						<Text
-							key={i}
+							key={entry.id}
 							style={styles.logLine}
 						>
-							{line}
+							{entry.message}
 						</Text>
 					))}
 				</ScrollView>
 			</View>
 
-			{/* ===== DADO CENTRAL (esquina inferior derecha) ===== */}
-			<View
-				style={styles.diceContainer}
-				pointerEvents="box-none"
-			>
-				<View style={styles.dice}>
-					<Text style={styles.diceLabel}>DADO</Text>
-					<Text style={styles.diceState}>Idle</Text>
-					<View style={styles.diceFace}>
-						<Text style={styles.diceFaceText}>—</Text>
-					</View>
-				</View>
-			</View>
+			<CentralDice
+				diceUi={diceUi}
+				lastTotal={lastDiceTotal}
+				disabled={state.isFinished}
+				onPress={onDicePress}
+			/>
 		</View>
 	);
 }
 
-const HEADER_H = 44;
-const LOG_H = 72;
-
 const styles = StyleSheet.create({
-	root: {
-		flex: 1,
-		backgroundColor: '#1a1a1e',
-		// Landscape: el contenedor padre debe forzar orientation
-	},
-
-	// --- Header ---
+	root: { flex: 1, backgroundColor: '#1a1a1e' },
 	header: {
-		height: HEADER_H,
+		height: 44,
 		paddingHorizontal: 16,
 		flexDirection: 'row',
 		alignItems: 'center',
@@ -171,24 +246,9 @@ const styles = StyleSheet.create({
 		borderBottomWidth: 1,
 		borderBottomColor: '#2a2a32',
 	},
-	headerTitle: {
-		color: '#e8e6e3',
-		fontSize: 16,
-		fontWeight: '700',
-	},
-	headerMeta: {
-		color: '#9a9690',
-		fontSize: 13,
-	},
-
-	// --- Body (3 columnas) ---
-	body: {
-		flex: 1,
-		flexDirection: 'row',
-		minHeight: 0,
-	},
-
-	// Izquierda ~28%
+	headerTitle: { color: '#e8e6e3', fontSize: 16, fontWeight: '700' },
+	headerMeta: { color: '#9a9690', fontSize: 12 },
+	body: { flex: 1, flexDirection: 'row', minHeight: 0 },
 	leftPanel: {
 		width: '28%',
 		padding: 10,
@@ -206,28 +266,17 @@ const styles = StyleSheet.create({
 		borderWidth: 1,
 		borderColor: '#3d3d4a',
 	},
-	actionButtonText: {
-		color: '#e8e6e3',
-		fontSize: 15,
-		fontWeight: '600',
-	},
-
-	// Centro
-	battlefield: {
-		flex: 1,
-		padding: 10,
-		backgroundColor: '#1a1a1e',
-	},
+	actionSelected: { borderColor: '#c9a227', backgroundColor: '#3a3420' },
+	actionDisabled: { opacity: 0.4 },
+	actionButtonText: { color: '#e8e6e3', fontSize: 15, fontWeight: '600' },
+	battlefield: { flex: 1, padding: 10 },
 	battlefieldRow: {
 		flex: 1,
 		flexDirection: 'row',
 		alignItems: 'center',
 		justifyContent: 'space-evenly',
 	},
-	unitColumn: {
-		flex: 1,
-		maxWidth: 160,
-	},
+	unitColumn: { flex: 1, maxWidth: 170 },
 	columnTitle: {
 		color: '#6b6760',
 		fontSize: 11,
@@ -244,20 +293,13 @@ const styles = StyleSheet.create({
 		borderWidth: 1,
 		borderColor: '#3a3a45',
 	},
-	unitActive: {
-		borderColor: '#c9a227',
-		borderWidth: 2,
-	},
-	unitEnemy: {
-		backgroundColor: '#2a1e1e',
-	},
-	unitTarget: {
-		borderColor: '#c44',
-		borderWidth: 2,
-	},
+	unitActive: { borderColor: '#c9a227', borderWidth: 2 },
+	unitEnemy: { backgroundColor: '#2a1e1e' },
+	unitTarget: { borderColor: '#c44', borderWidth: 2 },
+	unitDown: { opacity: 0.35 },
 	unitName: {
 		color: '#e8e6e3',
-		fontSize: 13,
+		fontSize: 12,
 		fontWeight: '600',
 		marginBottom: 4,
 	},
@@ -267,22 +309,15 @@ const styles = StyleSheet.create({
 		borderRadius: 3,
 		overflow: 'hidden',
 	},
-	lifeBarFill: {
-		height: '100%',
-		backgroundColor: '#3d8b5f',
-	},
-	lifeBarFillEnemy: {
-		height: '100%',
-		backgroundColor: '#a33',
-	},
+	lifeBarFill: { height: '100%', backgroundColor: '#3d8b5f' },
+	lifeBarFillEnemy: { height: '100%', backgroundColor: '#a33' },
+	lifeText: { color: '#6b6760', fontSize: 10, marginTop: 2 },
 	vs: {
 		color: '#5a5650',
 		fontSize: 14,
 		fontWeight: '700',
 		marginHorizontal: 8,
 	},
-
-	// Derecha ~22%
 	rightPanel: {
 		width: '22%',
 		padding: 12,
@@ -296,16 +331,13 @@ const styles = StyleSheet.create({
 		fontWeight: '700',
 		marginBottom: 8,
 	},
-	infoLine: {
-		color: '#9a9690',
+	infoLine: { color: '#9a9690', fontSize: 13, marginBottom: 4 },
+	readyHint: {
+		color: '#5dce7a',
 		fontSize: 13,
-		marginBottom: 4,
+		marginTop: 12,
+		fontWeight: '700',
 	},
-	infoRules: {
-		marginTop: 8,
-		fontStyle: 'italic',
-	},
-
 	sectionLabel: {
 		color: '#6b6760',
 		fontSize: 11,
@@ -313,74 +345,15 @@ const styles = StyleSheet.create({
 		letterSpacing: 1,
 		marginBottom: 8,
 	},
-
-	// --- Log ---
 	log: {
-		height: LOG_H,
+		height: 80,
 		paddingHorizontal: 12,
 		paddingTop: 6,
+		paddingRight: 110,
 		backgroundColor: '#121216',
 		borderTopWidth: 1,
 		borderTopColor: '#2a2a32',
-		// Deja hueco a la derecha para el dado
-		paddingRight: 100,
 	},
-	logScroll: {
-		flex: 1,
-	},
-	logLine: {
-		color: '#8a8680',
-		fontSize: 12,
-		marginBottom: 2,
-	},
-
-	// --- Dado Central (esquina inferior derecha) ---
-	diceContainer: {
-		position: 'absolute',
-		right: 12,
-		bottom: 12,
-		zIndex: 20,
-	},
-	dice: {
-		width: 80,
-		height: 80,
-		borderRadius: 12,
-		backgroundColor: '#2a2520',
-		borderWidth: 2,
-		borderColor: '#c9a227',
-		alignItems: 'center',
-		justifyContent: 'center',
-		// Sombra táctil
-		elevation: 6,
-		shadowColor: '#000',
-		shadowOpacity: 0.4,
-		shadowRadius: 6,
-		shadowOffset: { width: 0, height: 2 },
-	},
-	diceLabel: {
-		position: 'absolute',
-		top: 4,
-		color: '#6b6760',
-		fontSize: 9,
-		letterSpacing: 1,
-	},
-	diceState: {
-		position: 'absolute',
-		bottom: 4,
-		color: '#9a9690',
-		fontSize: 10,
-	},
-	diceFace: {
-		width: 36,
-		height: 36,
-		borderRadius: 6,
-		backgroundColor: '#1a1a1e',
-		alignItems: 'center',
-		justifyContent: 'center',
-	},
-	diceFaceText: {
-		color: '#e8e6e3',
-		fontSize: 18,
-		fontWeight: '700',
-	},
+	logScroll: { flex: 1 },
+	logLine: { color: '#8a8680', fontSize: 12, marginBottom: 2 },
 });
