@@ -1,26 +1,24 @@
 /**
  * CombatResolver – resolución de ataques (4AD / GDD §7.3)
- * Solo ataque básico. Puro, sin efectos secundarios.
- *
- * finalValue = dice.total + classModifier + equipmentModifiers
- * success    = finalValue >= defenseValue (level del monstruo)
- * damage     = heridas/kills según exceso sobre el level (regla 4AD)
- * critical   = dice.isExplosive
+ * Usa AttackModifiers para todas las reglas especiales.
+ * Puro, sin efectos secundarios.
  */
 
 import { rollWithExplosiveSix } from './DiceService';
+import {
+	computeAttackModifiers,
+	applyAttackNaturalRules,
+	getClassAttackMod,
+	getWeaponAttackMod,
+	type AttackModContext,
+} from './AttackModifiers';
 import type { DiceResult, EnemyInstance, Hero } from '../types/combat';
-
-export type AttackContext = {
-	enemiesOutnumbered?: boolean;
-	extraModifiers?: number;
-};
 
 export type ResolutionRequest = {
 	actor: Hero;
 	target: EnemyInstance;
 	targetType: 'vermin' | 'minion' | 'boss' | 'weird';
-	context?: AttackContext;
+	context?: AttackModContext;
 	rng?: () => number;
 };
 
@@ -30,51 +28,14 @@ export type ResolutionResult = {
 	defenseValue: number;
 	classModifier: number;
 	equipmentModifier: number;
+	situationalModifier: number;
 	success: boolean;
 	damage: number;
 	critical: boolean;
+	blocked: boolean;
 	message: string;
+	notes: string[];
 };
-
-/** Modificador de clase al ataque (4AD exacto) */
-export function getClassAttackModifier(
-	actor: Hero,
-	target: EnemyInstance,
-	context: AttackContext = {},
-): number {
-	const level = actor.level;
-
-	switch (actor.class) {
-		case 'warrior':
-			return level;
-		case 'cleric':
-			return target.isUndead ? level : Math.floor(level / 2);
-		case 'rogue':
-			return context.enemiesOutnumbered ? level : 0;
-		case 'wizard':
-			return 0; // arma; hechizos se resuelven aparte
-		default:
-			return 0;
-	}
-}
-
-/** Modificador de arma (two-handed +1, light -1, crushing +1 vs undead) */
-export function getEquipmentAttackModifier(
-	actor: Hero,
-	target: EnemyInstance,
-): number {
-	const weapon = actor.equipment?.mainHand;
-	if (!weapon) return 0;
-
-	let mod = 0;
-	const tags = (weapon as { tags?: string[] }).tags ?? [];
-
-	if (tags.includes('two-handed')) mod += 1;
-	if (tags.includes('light')) mod -= 1;
-	if (tags.includes('crushing') && target.isUndead) mod += 1;
-
-	return mod;
-}
 
 export function getDefenseValue(target: EnemyInstance): number {
 	return target.level;
@@ -82,7 +43,6 @@ export function getDefenseValue(target: EnemyInstance): number {
 
 /**
  * Cada bloque de `level` puntos inflige 1 herida / mata 1 minion.
- * Ej: 8 vs level 3 → 2 kills.  9 vs level 4 → 2 heridas.
  */
 export function calculateDamage(
 	finalValue: number,
@@ -96,14 +56,34 @@ export function calculateDamage(
 export function resolveAttack(request: ResolutionRequest): ResolutionResult {
 	const { actor, target, targetType, context = {}, rng } = request;
 
-	const dice = rollWithExplosiveSix(rng);
-	const classModifier = getClassAttackModifier(actor, target, context);
-	const equipmentModifier = getEquipmentAttackModifier(actor, target);
-	const extra = context.extraModifiers ?? 0;
+	const mods = computeAttackModifiers(actor, target, context);
 
-	const finalValue = dice.total + classModifier + equipmentModifier + extra;
+	if (mods.blocked) {
+		return {
+			dice: { raw: 0, explosive: [], total: 0, isExplosive: false },
+			finalValue: 0,
+			defenseValue: target.level,
+			classModifier: mods.classMod,
+			equipmentModifier: mods.weaponMod,
+			situationalModifier: mods.situationalMod,
+			success: false,
+			damage: 0,
+			critical: false,
+			blocked: true,
+			message: `${actor.name} no puede atacar a ${target.name}: ${mods.blockReason}`,
+			notes: mods.notes,
+		};
+	}
+
+	const dice = rollWithExplosiveSix(rng);
+	const finalValue = dice.total + mods.total;
 	const defenseValue = getDefenseValue(target);
-	const success = finalValue >= defenseValue;
+
+	const { success, forced } = applyAttackNaturalRules(
+		dice.raw,
+		finalValue,
+		defenseValue,
+	);
 	const damage = calculateDamage(finalValue, defenseValue, success);
 	const critical = dice.isExplosive;
 
@@ -117,18 +97,22 @@ export function resolveAttack(request: ResolutionRequest): ResolutionResult {
 		success,
 		damage,
 		critical,
+		forced,
 	});
 
 	return {
 		dice,
 		finalValue,
 		defenseValue,
-		classModifier,
-		equipmentModifier,
+		classModifier: mods.classMod,
+		equipmentModifier: mods.weaponMod,
+		situationalModifier: mods.situationalMod,
 		success,
 		damage,
 		critical,
+		blocked: false,
 		message,
+		notes: mods.notes,
 	};
 }
 
@@ -142,13 +126,15 @@ function buildMessage(p: {
 	success: boolean;
 	damage: number;
 	critical: boolean;
+	forced: 'hit' | 'miss' | null;
 }): string {
 	const diceStr = p.critical
 		? `${p.dice.total} (Explosive: ${[p.dice.raw, ...p.dice.explosive].join('+')})`
 		: `${p.dice.total}`;
 
 	if (!p.success) {
-		return `${p.actor.name} ataca a ${p.target.name}: ${diceStr} → ${p.finalValue} vs ${p.defenseValue} → FALLO`;
+		const reason = p.forced === 'miss' ? ' (natural 1)' : '';
+		return `${p.actor.name} ataca a ${p.target.name}: ${diceStr} → ${p.finalValue} vs ${p.defenseValue} → FALLO${reason}`;
 	}
 
 	const isSwarm = p.targetType === 'vermin' || p.targetType === 'minion';
@@ -160,5 +146,24 @@ function buildMessage(p: {
 			? '1 herida'
 			: `${p.damage} heridas`;
 
-	return `${p.actor.name} ataca a ${p.target.name}: ${diceStr} → ${p.finalValue} vs ${p.defenseValue} → ÉXITO (${dmgStr})${p.critical ? ' ¡CRÍTICO!' : ''}`;
+	const extra =
+		(p.critical ? ' ¡CRÍTICO!' : '') +
+		(p.forced === 'hit' ? ' (natural 6)' : '');
+	return `${p.actor.name} ataca a ${p.target.name}: ${diceStr} → ${p.finalValue} vs ${p.defenseValue} → ÉXITO (${dmgStr})${extra}`;
+}
+
+// Wrappers de compatibilidad con la API anterior (devuelven number)
+export function getClassAttackModifier(
+	actor: Hero,
+	target: EnemyInstance,
+	context: AttackModContext = {},
+): number {
+	return getClassAttackMod(actor, target, context).mod;
+}
+
+export function getEquipmentAttackModifier(
+	actor: Hero,
+	target: EnemyInstance,
+): number {
+	return getWeaponAttackMod(actor, target).mod;
 }
