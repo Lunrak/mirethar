@@ -5,8 +5,9 @@ export type DiceResult = {
 	isExplosive: boolean;
 };
 
-// Re-exportamos desde items para que todo el proyecto use la misma definición
+// Re-export desde items (fuente de verdad)
 export type { EquipmentSlot, Item } from '../data/items';
+import type { EquipmentSlot, Item } from '../data/items';
 
 export type StatusEffect = { id: string; name: string };
 
@@ -31,8 +32,18 @@ export type EnemyInstance = {
 };
 
 export type CombatPosition = { front: string[]; rear: string[] };
-export type Action = { type: string; name: string };
-export type CombatLogEntry = { id: string; message: string; timestamp: number };
+
+export type Action = {
+	type: string; // 'attack' | 'defend' | 'cast' | 'heal' | 'flee' | ...
+	name: string;
+	requiresTarget?: boolean;
+};
+
+export type CombatLogEntry = {
+	id: string;
+	message: string;
+	timestamp: number;
+};
 
 export type Hero = {
 	id: string;
@@ -41,9 +52,7 @@ export type Hero = {
 	level: number;
 	life: number;
 	maxLife: number;
-	equipment: Partial<
-		Record<import('../data/items').EquipmentSlot, import('../data/items').Item>
-	>;
+	equipment: Partial<Record<EquipmentSlot, Item>>;
 	spells?: string[];
 	status: StatusEffect[];
 	isFallen: boolean;
@@ -64,11 +73,13 @@ export type EnemyTemplate = {
 	isUndead?: boolean;
 };
 
+export type CombatPhase = 'heroTurn' | 'enemyTurn' | 'resolution' | 'ended';
+
 export type CombatState = {
 	id: string;
 	round: number;
 	currentActorId: string | null;
-	phase: 'heroTurn' | 'enemyTurn' | 'resolution' | 'ended';
+	phase: CombatPhase;
 	heroes: Hero[];
 	enemies: EnemyInstance[];
 	positions: CombatPosition;
@@ -77,4 +88,8 @@ export type CombatState = {
 	log: CombatLogEntry[];
 	isFinished: boolean;
 	result: 'victory' | 'defeat' | null;
+	/** Orden de turno de héroes vivos (ids) */
+	heroTurnOrder: string[];
+	/** Índice del héroe actual dentro de heroTurnOrder */
+	heroTurnIndex: number;
 };
