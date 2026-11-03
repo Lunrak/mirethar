@@ -5,16 +5,31 @@ export type DiceResult = {
 	isExplosive: boolean;
 };
 
-// Stubs mínimos para que los tipos principales compilen
-export type EquipmentSlot = string;
-export type Item = { id: string; name: string };
+// Re-exportamos desde items para que todo el proyecto use la misma definición
+export type { EquipmentSlot, Item } from '../data/items';
+
 export type StatusEffect = { id: string; name: string };
-export type ReactionType = string;
+
+export type ReactionType =
+	| 'flee'
+	| 'flee_if_outnumbered'
+	| 'bribe'
+	| 'fight'
+	| 'fight_to_death'
+	| 'always_fight'
+	| 'quest'
+	| 'sleeping';
+
 export type EnemyInstance = {
 	id: string;
 	templateId: string;
 	currentLife: number;
+	name: string;
+	level: number;
+	attacks: number;
+	isUndead?: boolean;
 };
+
 export type CombatPosition = { front: string[]; rear: string[] };
 export type Action = { type: string; name: string };
 export type CombatLogEntry = { id: string; message: string; timestamp: number };
@@ -26,7 +41,9 @@ export type Hero = {
 	level: number;
 	life: number;
 	maxLife: number;
-	equipment: Partial<Record<EquipmentSlot, Item>>;
+	equipment: Partial<
+		Record<import('../data/items').EquipmentSlot, import('../data/items').Item>
+	>;
 	spells?: string[];
 	status: StatusEffect[];
 	isFallen: boolean;
