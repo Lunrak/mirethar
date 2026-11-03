@@ -19,6 +19,11 @@ import {
 	resolveSpell,
 	applyAbilityEffects,
 } from './AbilityResolver';
+import {
+	applyDamageToHero,
+	finalizeCombatHeroes,
+	releaseBodyIfCarrierDown,
+} from './HeroStatus';
 import type { AttackModContext } from './AttackModifiers';
 import type {
 	Action,
@@ -64,7 +69,7 @@ function checkEndCondition(state: CombatState): CombatState {
 	const aliveEnemies = getAliveEnemies(state.enemies);
 
 	if (aliveEnemies.length === 0) {
-		return {
+		const ended: CombatState = {
 			...state,
 			phase: 'ended',
 			isFinished: true,
@@ -74,10 +79,12 @@ function checkEndCondition(state: CombatState): CombatState {
 			selectedTargetId: null,
 			log: [...state.log, log('¡Victoria! Todos los enemigos derrotados.')],
 		};
+		// Caídos no curados → muertos al cerrar el combate
+		return finalizeCombatHeroes(ended);
 	}
 
 	if (aliveHeroes.length === 0) {
-		return {
+		const ended: CombatState = {
 			...state,
 			phase: 'ended',
 			isFinished: true,
@@ -87,6 +94,7 @@ function checkEndCondition(state: CombatState): CombatState {
 			selectedTargetId: null,
 			log: [...state.log, log('Derrota... Todos los héroes han caído.')],
 		};
+		return finalizeCombatHeroes(ended);
 	}
 
 	return state;
@@ -314,14 +322,17 @@ export function runEnemyTurn(
 
 			if (!defResult.success) {
 				const heroIdx = heroes.findIndex((h) => h.id === target!.id);
-				const h = { ...heroes[heroIdx] };
-				h.life = Math.max(0, h.life - defResult.damageTaken);
-				if (h.life <= 0) {
-					h.isFallen = true;
-					logEntries.push(log(`${h.name} ha caído (0 life).`));
+				const damaged = applyDamageToHero(
+					heroes[heroIdx],
+					defResult.damageTaken,
+				);
+				if (damaged.isFallen && !heroes[heroIdx].isFallen) {
+					logEntries.push(log(`${damaged.name} ha caído (0 life).`));
 				}
-				heroes[heroIdx] = h;
+				heroes[heroIdx] = damaged;
 			}
+			// Si el carrier cae, suelta el cuerpo
+			heroes = releaseBodyIfCarrierDown(heroes);
 		}
 	}
 
