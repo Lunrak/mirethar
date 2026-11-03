@@ -1,50 +1,41 @@
-Mirethar – Progress Report (Semana 1)
+Mirethar – Progress Report
 
-Fecha: 2026-11-03
-Alcance: Días 1–7 (core data-driven + estado de combate)
-Stack: React Native + Expo (TypeScript) – solo capa /src/core
+Última actualización: 2026-11-03 (Semana 2 – Día 14)
+Stack: React Native + Expo (TypeScript) – capa /src/core
 
-✅ Qué funciona
+Semana 1 (Días 1–7) – Foundation
 
-Datos (data-driven)
-
-Archivo
+Módulo
 
 Estado
 
-Notas
-
-src/core/data/vermin.ts
+Tablas vermin / minions / bosses
 
 ✅
 
-6 entradas exactas 4AD (Rats → Skeletal Rats)
-
-src/core/data/minions.ts
+items + classes + createDefaultParty
 
 ✅
 
-6 entradas exactas 4AD (Skeletons/Zombies → Fungi Folk)
-
-src/core/data/bosses.ts
+DiceService (Explosive Six)
 
 ✅
 
-6 bosses del manual básico (Mummy → Small Dragon)
-
-src/core/data/items.ts
+EncounterGenerator
 
 ✅
 
-Equipo inicial de las 4 clases + slots
-
-src/core/data/classes.ts
+CombatStateManager (reducer inmutable)
 
 ✅
 
-Life, traits y equipo inicial exactos del GDD §3.2
+41 tests base
 
-Reglas / lógica
+✅
+
+Semana 2 (Días 8–14) – Motor de reglas de combate
+
+✅ Qué funciona
 
 Módulo
 
@@ -52,150 +43,170 @@ Estado
 
 Notas
 
-DiceService
+CombatResolver / resolveAttack
 
 ✅
 
-rollD6, rollWithExplosiveSix, rollDice (inyectable RNG)
+finalValue, defense=level, daño por exceso, critical
 
-EncounterGenerator
-
-✅
-
-Genera Vermin / Minion / Boss con cantidades 4AD
-
-CombatStateManager
+AttackModifiers
 
 ✅
 
-Estado inmutable + reducer. Fases: heroTurn → resolution → next / enemyTurn / ended
+clase, arma, undead, crushing, arrows, pasillo
 
-createDefaultParty()
-
-✅
-
-Guerrero (7), Pícaro (4), Clérigo (5), Mago (3) con equipo 4AD
-
-Tipos
-
-Tipo
-
-Estado
-
-EnemyTemplate / EnemyInstance
+DefenseCalculator
 
 ✅
 
-Hero / Action / CombatState
+armor/shield, rogue +L, surprise, natural 1/6
 
-✅ (incluye heroTurnOrder, heroTurnIndex)
+TurnManager
 
-ReactionType
+✅
 
-✅ (union tipada)
+turnos héroe + enemigo auto, victoria/derrota
 
-Item / EquipmentSlot
+AbilityResolver
 
-✅ (fuente de verdad en items.ts)
+✅
 
-Tests
+Healing clérigo, Fireball/Lightning/Sleep/Protect/Blessing/Escape
+
+HeroStatus
+
+✅
+
+vivo / herido / caído / muerto + cargar cadáver
+
+MoraleService
+
+✅
+
+> ½ minions/boss, never-test, level drop boss
+
+ReactionService
+
+✅
+
+reacciones 1–6, flee/bribe helpers
+
+TrollRegeneration
+
+✅
+
+d6 5–6, bloqueo hechizo/descuartizar
+
+XpService
+
+✅
+
+1 tirada al derrotar boss (MVP)
+
+Tests semana 2
 
 Suite
 
 Estado
 
-EncounterGenerator.test.ts
+CombatResolver + AttackDefenseRules
 
-✅ Generación + rangos de cantidad/nivel
+✅
 
-CombatStateManager.test.ts
+TurnManager
 
-✅ Crear, seleccionar, resolver, avanzar turno, inmutabilidad
+✅
 
-week1-review.test.ts
+AbilityResolver (4 clases vs goblins)
 
-✅ 5 combates de prueba + sistemas base
+✅
 
-classes.test.ts
+HeroStatus
 
-⚠️ Crear si aún no existe en el repo local
+✅
 
-⚠️ Qué falta / limitaciones actuales
+CombatRules4AD (46 tests exhaustivos)
 
-Combate (reglas)
+✅
 
-[ ] Resolución real de ataque/defensa (dados + modificadores de clase/equipo)
+week2-e2e-boss (4 héroes vs Boss)
 
-[ ] Aplicar daño a EnemyInstance.currentLife / Hero.life
+✅
 
-[ ] Caídos / muertos (isFallen → isDead)
+Flujo E2E verificado
 
-[ ] Moral, reacciones de monstruos, huida, soborno
+createDefaultParty()
+→ boss (Orc Brute / Medusa / Chaos Lord)
+→ createCombat
+→ loop: heroTurn (attack) → enemyTurn (defense rolls)
+→ boss life 0 → victory
+→ finalizeCombatHeroes (caídos → muertos)
+→ awardBossXp() + rollXpForHero()
 
-[ ] Turno de enemigos (AI mínima)
+Comprobado:
 
-[ ] Posicionamiento (frente / retaguardia) con efecto en reglas
+Victoria y derrota
 
-[ ] Hechizos del Mago y Healing del Clérigo
+Heridas acumuladas en boss hasta 0
 
-Contenido
+Caídos al final del combate pasan a muertos
 
-[ ] Tabla Weird Monsters
+1 tirada de XP al matar boss
 
-[ ] Tablas de tesoro / XP
+Log de combate coherente
 
-[ ] Expansiones (Abyss, Netherworld, Twisted Minions, Fiendish Foes)
+⚠️ Qué falta (Semana 3+)
 
-UI / App
+Combate / reglas
 
-[ ] Pantalla de combate (layout landscape)
+[ ] Integrar moral automáticamente en TurnManager tras bajas
+
+[ ] Integrar reacciones al inicio del encuentro
+
+[ ] Regeneración de trolls en el loop de turnos
+
+[ ] Tabla completa de level-up / XP thresholds
+
+[ ] Weird Monsters table
+
+[ ] Treasure rolls
+
+UI
+
+[ ] Pantalla de combate landscape
 
 [ ] Dado Central (estados visuales)
 
-[ ] Integración con React state / reducer en la UI
+[ ] Conectar modules/combat al core
 
-Arquitectura
+Meta
 
-[ ] Módulo modules/combat conectado al core
+[ ] Cementerio / cargar cadáver en mazmorra
 
-[ ] Persistencia de héroes / cementerio (post-MVP)
+[ ] Pueblo (Taberna, Mercado, etc.)
 
-Flujo verificado (Semana 1)
+Cómo ejecutar
 
-createDefaultParty()
-↓
-generateEncounter('vermin' | 'minion' | 'boss')
-↓
-createCombat(heroes, enemies)
-↓
-selectAction → selectTarget → startResolution → finishResolution
-↓
-(siguiente héroe | enemyTurn | ended)
-
-Estado siempre inmutable. Cada acción del reducer devuelve un nuevo objeto.
-
-Cómo ejecutar la revisión
-
-# Todos los tests de core
+# Toda la suite core
 
 npx jest src/core --verbose
 
-# Solo revisión semana 1
+# Solo E2E boss (consola)
 
-npx jest week1-review --verbose
+npx jest week2-e2e-boss --verbose
 
-# Solo combate
+# Reglas 4AD exhaustivas
 
-npx jest CombatStateManager --verbose
+npx jest CombatRules4AD --verbose
 
-Próximos pasos recomendados (Semana 2)
+Próximos pasos recomendados (Semana 3)
 
-Día 8–9: CombatResolver – resolver ataque/defensa con Explosive Six + mods de clase.
+Vertical slice UI: Guerrero vs Goblins + Dado Central
 
-Día 10: Aplicar daño, caídos y victoria/derrota automática.
+Enganchar moral/reacciones/trolls al TurnManager
 
-Día 11–12: Turno enemigo simple + reacciones básicas.
+Treasure + XP level-up
 
-Día 13: Vertical slice UI (Guerrero vs Goblins + Dado Central).
+Primer flujo de exploración de salas
 
-Documento generado en la revisión del Día 7 (Semana 1).
+Semana 2 cerrada: motor de reglas de combate usable sin UI.
