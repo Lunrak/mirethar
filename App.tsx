@@ -1,20 +1,25 @@
 import { StatusBar } from 'expo-status-bar';
 import { StyleSheet, Text, View } from 'react-native';
+import { CombatScreen } from './src/modules/combat';
 
 export default function App() {
-	return (
-		<View style={styles.container}>
-			<Text style={styles.title}>MIRETHAR</Text>
-			<Text style={styles.subtitle}>
-				Landscape listo · Motor de combate pendiente
-			</Text>
-			<StatusBar
-				style="light"
-				hidden
-			/>
-		</View>
-	);
+	return <CombatScreen />;
 }
+
+// export default function App() {
+// 	return (
+// 		<View style={styles.container}>
+// 			<Text style={styles.title}>MIRETHAR</Text>
+// 			<Text style={styles.subtitle}>
+// 				Landscape listo · Motor de combate pendiente
+// 			</Text>
+// 			<StatusBar
+// 				style="light"
+// 				hidden
+// 			/>
+// 		</View>
+// 	);
+// }
 
 const styles = StyleSheet.create({
 	container: {
