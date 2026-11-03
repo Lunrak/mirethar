@@ -53,7 +53,10 @@ export type Hero = {
 	life: number;
 	maxLife: number;
 	equipment: Partial<Record<EquipmentSlot, Item>>;
+	/** Hechizos preparados (wizard) */
 	spells?: string[];
+	/** Usos de Healing restantes del clérigo (3 por aventura) */
+	healingUsesLeft?: number;
 	status: StatusEffect[];
 	isFallen: boolean;
 	isDead: boolean;

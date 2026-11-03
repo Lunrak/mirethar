@@ -25,7 +25,8 @@ export function rollWithExplosiveSix(
 	rolls.push(current);
 	total += current;
 
-	while (current === 6) {
+	const MAX_EXPLOSIONS = 20;
+	while (current === 6 && rolls.length <= MAX_EXPLOSIONS) {
 		current = rollD6(rng);
 		rolls.push(current);
 		total += current;
