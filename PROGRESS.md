@@ -1,6 +1,6 @@
 Mirethar – Progress Report
 
-Última actualización: 2026-11-06 (Semana 3 – Día 19 unidades visuales)
+Última actualización: 2026-11-06 (Semana 3 – Día 20 log + panel objetivo)
 Stack: React Native + Expo (TypeScript) – capa /src/core + UI combate
 
 Semana 1 (Días 1–7) – Foundation

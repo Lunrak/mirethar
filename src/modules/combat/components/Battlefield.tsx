@@ -114,7 +114,7 @@ function UnitCardShell({
 				<Animated.View
 					pointerEvents="none"
 					style={[
-						StyleSheet.absoluteFillObject,
+						StyleSheet.absoluteFill,
 						{
 							borderRadius: 10,
 							backgroundColor: '#fff',

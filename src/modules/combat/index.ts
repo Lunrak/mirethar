@@ -7,6 +7,8 @@ export type {
 	CombatFeedbackData,
 	FeedbackKind,
 } from './components/CombatFeedback';
+export { CombatLog } from './components/CombatLog';
+export { TargetInfoPanel } from './components/TargetInfoPanel';
 export {
 	HeroGearIcons,
 	LifeBar,
