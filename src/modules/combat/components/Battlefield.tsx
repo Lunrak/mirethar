@@ -1,10 +1,11 @@
 /**
  * Campo de batalla – selección de objetivo tocando unidades
  * Héroes (izq) / Enemigos (der). Targets ≥ 48 dp para dos pulgares.
+ * Día 18: animación de impacto en actor/objetivo.
  */
 
-import React from 'react';
-import { View, Text, StyleSheet, Pressable } from 'react-native';
+import React, { useEffect, useRef } from 'react';
+import { View, Text, StyleSheet, Pressable, Animated } from 'react-native';
 import type { Hero, EnemyInstance, Action } from '../../../core/types/combat';
 import { getHeroStatus } from '../../../core/rules/HeroStatus';
 
@@ -19,6 +20,12 @@ type Props = {
 	onSelectHero: (id: string) => void;
 	/** Si true, el ataque ya tiene objetivo automático (grupo homogéneo) */
 	targetAutoSelected?: boolean;
+	/** Id de la unidad que recibe impacto visual */
+	impactTargetId?: string | null;
+	/** Id del actor que actúa (pulso suave) */
+	impactActorId?: string | null;
+	/** Cambia en cada resolución para reiniciar animación */
+	impactKey?: string | null;
 };
 
 /** Iconos temporales por clase (MVP) */
@@ -33,6 +40,106 @@ function lifePct(cur: number, max: number) {
 	return `${Math.max(0, Math.min(100, Math.round((cur / Math.max(1, max)) * 100)))}%`;
 }
 
+function useImpactAnim(active: boolean, key: string | null | undefined) {
+	const scale = useRef(new Animated.Value(1)).current;
+	const glow = useRef(new Animated.Value(0)).current;
+
+	useEffect(() => {
+		if (!active || !key) {
+			scale.setValue(1);
+			glow.setValue(0);
+			return;
+		}
+		scale.setValue(1);
+		glow.setValue(0);
+		const anim = Animated.sequence([
+			Animated.parallel([
+				Animated.timing(scale, {
+					toValue: 1.12,
+					duration: 100,
+					useNativeDriver: true,
+				}),
+				Animated.timing(glow, {
+					toValue: 1,
+					duration: 100,
+					useNativeDriver: true,
+				}),
+			]),
+			Animated.parallel([
+				Animated.spring(scale, {
+					toValue: 1,
+					friction: 4,
+					tension: 120,
+					useNativeDriver: true,
+				}),
+				Animated.timing(glow, {
+					toValue: 0,
+					duration: 450,
+					useNativeDriver: true,
+				}),
+			]),
+		]);
+		anim.start();
+		return () => anim.stop();
+	}, [active, key, scale, glow]);
+
+	return { scale, glow };
+}
+
+function UnitCardShell({
+	activeImpact,
+	impactKey,
+	children,
+	style,
+}: {
+	activeImpact: boolean;
+	impactKey?: string | null;
+	children: React.ReactNode;
+	style: object | object[];
+}) {
+	const { scale, glow } = useImpactAnim(activeImpact, impactKey);
+	const borderExtra = glow.interpolate({
+		inputRange: [0, 1],
+		outputRange: [0, 1],
+	});
+
+	return (
+		<Animated.View
+			style={[
+				style,
+				{
+					transform: [{ scale }],
+					// glow vía opacity de un overlay interno no es trivial con border;
+					// usamos scale + ligera elevación visual del contenedor
+					opacity: borderExtra.interpolate({
+						inputRange: [0, 1],
+						outputRange: [1, 1],
+					}),
+				},
+				activeImpact && { zIndex: 2 },
+			]}
+		>
+			{children}
+			{activeImpact && (
+				<Animated.View
+					pointerEvents="none"
+					style={[
+						StyleSheet.absoluteFillObject,
+						{
+							borderRadius: 10,
+							backgroundColor: '#fff',
+							opacity: glow.interpolate({
+								inputRange: [0, 1],
+								outputRange: [0, 0.28],
+							}),
+						},
+					]}
+				/>
+			)}
+		</Animated.View>
+	);
+}
+
 export function Battlefield({
 	heroes,
 	enemies,
@@ -43,6 +150,9 @@ export function Battlefield({
 	onSelectEnemy,
 	onSelectHero,
 	targetAutoSelected = false,
+	impactTargetId = null,
+	impactActorId = null,
+	impactKey = null,
 }: Props) {
 	const needsTarget = !!selectedAction?.requiresTarget;
 	const targetingEnemy =
@@ -70,7 +180,7 @@ export function Battlefield({
 			)}
 
 			<View style={styles.row}>
-				{/* Héroes – pulgar puede alcanzar desde el centro */}
+				{/* Héroes */}
 				<View style={styles.col}>
 					<Text style={styles.colTitle}>Héroes</Text>
 					{heroes.map((h) => {
@@ -79,48 +189,58 @@ export function Battlefield({
 						const selected = h.id === selectedTargetId;
 						const selectable = canTap && targetingHero && !down;
 						const icon = CLASS_ICON[h.class] ?? '👤';
+						const hit =
+							impactKey != null &&
+							(h.id === impactTargetId || h.id === impactActorId);
 
 						return (
-							<Pressable
+							<UnitCardShell
 								key={h.id}
-								disabled={!selectable}
-								onPress={() => onSelectHero(h.id)}
-								hitSlop={6}
-								style={({ pressed }) => [
+								activeImpact={!!hit}
+								impactKey={impactKey}
+								style={[
 									styles.card,
 									active && styles.cardActive,
 									selected && styles.cardSelectedHero,
 									down && styles.cardDown,
 									selectable && styles.cardSelectable,
-									pressed && selectable && styles.cardPressed,
 								]}
-								accessibilityRole="button"
-								accessibilityLabel={`${h.name}, ${h.class}, ${getHeroStatus(h)}, ${h.life} de ${h.maxLife}`}
 							>
-								<View style={styles.nameRow}>
-									<Text style={styles.icon}>{icon}</Text>
-									<Text
-										style={styles.name}
-										numberOfLines={1}
-									>
-										{h.name}
+								<Pressable
+									disabled={!selectable}
+									onPress={() => onSelectHero(h.id)}
+									hitSlop={6}
+									style={({ pressed }) => [
+										pressed && selectable && styles.cardPressed,
+									]}
+									accessibilityRole="button"
+									accessibilityLabel={`${h.name}, ${h.class}, ${getHeroStatus(h)}, ${h.life} de ${h.maxLife}`}
+								>
+									<View style={styles.nameRow}>
+										<Text style={styles.icon}>{icon}</Text>
+										<Text
+											style={styles.name}
+											numberOfLines={1}
+										>
+											{h.name}
+										</Text>
+									</View>
+									<Text style={styles.meta}>
+										{h.class} · {getHeroStatus(h)}
 									</Text>
-								</View>
-								<Text style={styles.meta}>
-									{h.class} · {getHeroStatus(h)}
-								</Text>
-								<View style={styles.barTrack}>
-									<View
-										style={[
-											styles.barHero,
-											{ width: lifePct(h.life, h.maxLife) },
-										]}
-									/>
-								</View>
-								<Text style={styles.hp}>
-									{h.life}/{h.maxLife}
-								</Text>
-							</Pressable>
+									<View style={styles.barTrack}>
+										<View
+											style={[
+												styles.barHero,
+												{ width: lifePct(h.life, h.maxLife) },
+											]}
+										/>
+									</View>
+									<Text style={styles.hp}>
+										{h.life}/{h.maxLife}
+									</Text>
+								</Pressable>
+							</UnitCardShell>
 						);
 					})}
 				</View>
@@ -133,48 +253,60 @@ export function Battlefield({
 					{enemies.map((e) => {
 						const dead = e.currentLife <= 0;
 						const selected = e.id === selectedTargetId;
-						// Solo permitir toque si hay que elegir entre objetivos distintos
 						const selectable =
 							canTap && targetingEnemy && !dead && !targetAutoSelected;
+						const hit =
+							impactKey != null &&
+							(e.id === impactTargetId || e.id === impactActorId);
 
 						return (
-							<Pressable
+							<UnitCardShell
 								key={e.id}
-								disabled={!selectable}
-								onPress={() => onSelectEnemy(e.id)}
-								hitSlop={6}
-								style={({ pressed }) => [
+								activeImpact={!!hit}
+								impactKey={impactKey}
+								style={[
 									styles.card,
 									styles.cardEnemy,
 									selected && styles.cardSelectedEnemy,
 									dead && styles.cardDown,
 									selectable && styles.cardSelectableEnemy,
-									pressed && selectable && styles.cardPressed,
 								]}
-								accessibilityRole="button"
-								accessibilityLabel={`${e.name}, level ${e.level}, life ${e.currentLife}`}
 							>
-								<Text
-									style={styles.name}
-									numberOfLines={1}
+								<Pressable
+									disabled={!selectable}
+									onPress={() => onSelectEnemy(e.id)}
+									hitSlop={6}
+									style={({ pressed }) => [
+										pressed && selectable && styles.cardPressed,
+									]}
+									accessibilityRole="button"
+									accessibilityLabel={`${e.name}, level ${e.level}, life ${e.currentLife}`}
 								>
-									{e.name}
-								</Text>
-								<Text style={styles.meta}>L{e.level}</Text>
-								<View style={styles.barTrack}>
-									<View
-										style={[
-											styles.barEnemy,
-											{
-												width: dead
-													? '0%'
-													: lifePct(e.currentLife, Math.max(e.currentLife, 1)),
-											},
-										]}
-									/>
-								</View>
-								<Text style={styles.hp}>{e.currentLife}</Text>
-							</Pressable>
+									<Text
+										style={styles.name}
+										numberOfLines={1}
+									>
+										{e.name}
+									</Text>
+									<Text style={styles.meta}>L{e.level}</Text>
+									<View style={styles.barTrack}>
+										<View
+											style={[
+												styles.barEnemy,
+												{
+													width: dead
+														? '0%'
+														: lifePct(
+																e.currentLife,
+																Math.max(e.currentLife, 1),
+															),
+												},
+											]}
+										/>
+									</View>
+									<Text style={styles.hp}>{e.currentLife}</Text>
+								</Pressable>
+							</UnitCardShell>
 						);
 					})}
 				</View>
@@ -213,7 +345,7 @@ const styles = StyleSheet.create({
 		letterSpacing: 1,
 	},
 	card: {
-		minHeight: 56, // 48–56 dp
+		minHeight: 56,
 		marginBottom: 10,
 		paddingVertical: 8,
 		paddingHorizontal: 10,
@@ -221,6 +353,7 @@ const styles = StyleSheet.create({
 		borderRadius: 10,
 		borderWidth: 2,
 		borderColor: '#3a3a45',
+		overflow: 'hidden',
 	},
 	cardEnemy: { backgroundColor: '#2a1e1e' },
 	cardActive: { borderColor: '#c9a227' },

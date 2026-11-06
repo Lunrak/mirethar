@@ -1,20 +1,35 @@
 /**
- * Pantalla de combate – selección acción + objetivo (Día 17)
+ * Pantalla de combate – selección acción + objetivo + feedback visual (Día 18)
  * Dos pulgares: izquierda acciones, centro/derecha targets, dado abajo-derecha.
+ * Zoom suave hacia actor+objetivo en cada resolución (0.8–1.2 s) y retorno.
  */
 
 import React, { useEffect, useRef, useMemo } from 'react';
-import { View, Text, StyleSheet, ScrollView } from 'react-native';
+import {
+	View,
+	Text,
+	StyleSheet,
+	ScrollView,
+	Animated,
+	Easing,
+} from 'react-native';
 import { useCombatSession } from '../hooks/useCombatSession';
 import { CentralDice } from '../components/CentralDice';
 import { ActionPanel } from '../components/ActionPanel';
 import { Battlefield } from '../components/Battlefield';
+import { CombatFeedback } from '../components/CombatFeedback';
 import type { Action } from '../../../core/types/combat';
 
 const BASE_ACTIONS: Action[] = [
 	{ type: 'attack', name: 'Attack', requiresTarget: true },
 	{ type: 'defend', name: 'Defend', requiresTarget: false },
 ];
+
+/** Duración del zoom-in / hold / zoom-out (total ~1.1 s dentro de 0.8–1.2) */
+const ZOOM_IN_MS = 280;
+const ZOOM_HOLD_MS = 520;
+const ZOOM_OUT_MS = 320;
+const RESULT_AUTO_ACK_MS = 1150;
 
 export default function CombatScreen() {
 	const session = useCombatSession('minion');
@@ -23,6 +38,9 @@ export default function CombatScreen() {
 		diceUi,
 		lastDiceTotal,
 		targetAutoSelected,
+		lastFeedback,
+		focusActorId,
+		focusTargetId,
 		selectHeroAction,
 		selectEnemyTarget,
 		resolveDice,
@@ -31,7 +49,6 @@ export default function CombatScreen() {
 	} = session;
 
 	const spinTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
-	// ComponentRef evita el conflicto de tipos de RN (ScrollView componente vs instancia)
 	const logScrollRef = useRef<React.ComponentRef<typeof ScrollView>>(null);
 	const currentHero = state.heroes.find((h) => h.id === state.currentActorId);
 	const selectedTargetEnemy = state.enemies.find(
@@ -41,9 +58,13 @@ export default function CombatScreen() {
 		(h) => h.id === state.selectedTargetId,
 	);
 
+	// Cámara: scale + translate hacia actor/objetivo
+	const camScale = useRef(new Animated.Value(1)).current;
+	const camTx = useRef(new Animated.Value(0)).current;
+	const camTy = useRef(new Animated.Value(0)).current;
+
 	// Mantener el log siempre en la última línea
 	useEffect(() => {
-		// Pequeño delay para que el layout del nuevo texto esté listo
 		const t = setTimeout(() => {
 			logScrollRef.current?.scrollToEnd({ animated: true });
 		}, 50);
@@ -66,14 +87,92 @@ export default function CombatScreen() {
 		return list;
 	}, [currentHero?.class]);
 
+	/** Zoom hacia el lado del objetivo (enemigos derecha / héroes izquierda) */
+	const runCameraZoom = (actorId: string | null, targetId: string | null) => {
+		const isEnemyTarget =
+			!!targetId && state.enemies.some((e) => e.id === targetId);
+		const isHeroTarget =
+			!!targetId && state.heroes.some((h) => h.id === targetId);
+
+		// Aprox. sin measure: acercar al centro-derecha si enemigo, centro-izquierda si héroe
+		let toTx = 0;
+		let toTy = -8;
+		let toScale = 1.18;
+
+		if (isEnemyTarget) {
+			toTx = -28;
+			toScale = 1.22;
+		} else if (isHeroTarget) {
+			toTx = 28;
+			toScale = 1.2;
+		} else if (actorId) {
+			toTx = 18;
+			toScale = 1.12;
+		}
+
+		camScale.setValue(1);
+		camTx.setValue(0);
+		camTy.setValue(0);
+
+		Animated.sequence([
+			Animated.parallel([
+				Animated.timing(camScale, {
+					toValue: toScale,
+					duration: ZOOM_IN_MS,
+					easing: Easing.out(Easing.cubic),
+					useNativeDriver: true,
+				}),
+				Animated.timing(camTx, {
+					toValue: toTx,
+					duration: ZOOM_IN_MS,
+					easing: Easing.out(Easing.cubic),
+					useNativeDriver: true,
+				}),
+				Animated.timing(camTy, {
+					toValue: toTy,
+					duration: ZOOM_IN_MS,
+					easing: Easing.out(Easing.cubic),
+					useNativeDriver: true,
+				}),
+			]),
+			Animated.delay(ZOOM_HOLD_MS),
+			Animated.parallel([
+				Animated.timing(camScale, {
+					toValue: 1,
+					duration: ZOOM_OUT_MS,
+					easing: Easing.inOut(Easing.cubic),
+					useNativeDriver: true,
+				}),
+				Animated.timing(camTx, {
+					toValue: 0,
+					duration: ZOOM_OUT_MS,
+					easing: Easing.inOut(Easing.cubic),
+					useNativeDriver: true,
+				}),
+				Animated.timing(camTy, {
+					toValue: 0,
+					duration: ZOOM_OUT_MS,
+					easing: Easing.inOut(Easing.cubic),
+					useNativeDriver: true,
+				}),
+			]),
+		]).start();
+	};
+
+	// Al entrar en resultado: zoom + auto-acknowledge
 	useEffect(() => {
 		if (diceUi === 'result') {
-			spinTimeout.current = setTimeout(() => acknowledgeResult(), 1200);
+			runCameraZoom(focusActorId, focusTargetId);
+			spinTimeout.current = setTimeout(
+				() => acknowledgeResult(),
+				RESULT_AUTO_ACK_MS,
+			);
 			return () => {
 				if (spinTimeout.current) clearTimeout(spinTimeout.current);
 			};
 		}
-	}, [diceUi, acknowledgeResult]);
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [diceUi, focusActorId, focusTargetId]);
 
 	const onDicePress = () => {
 		if (diceUi === 'ready') resolveDice();
@@ -84,7 +183,7 @@ export default function CombatScreen() {
 	};
 
 	const onSelectHeroTarget = (id: string) => {
-		selectEnemyTarget(id); // mismo selectedTargetId en el state
+		selectEnemyTarget(id);
 	};
 
 	const actionsDisabled =
@@ -112,17 +211,38 @@ export default function CombatScreen() {
 					onSelect={selectHeroAction}
 				/>
 
-				<Battlefield
-					heroes={state.heroes}
-					enemies={state.enemies}
-					currentActorId={state.currentActorId}
-					selectedTargetId={state.selectedTargetId}
-					selectedAction={state.selectedAction}
-					phase={state.phase}
-					targetAutoSelected={targetAutoSelected}
-					onSelectEnemy={selectEnemyTarget}
-					onSelectHero={onSelectHeroTarget}
-				/>
+				{/* Zona de cámara: zoom sobre el campo */}
+				<View style={styles.cameraClip}>
+					<Animated.View
+						style={[
+							styles.cameraStage,
+							{
+								transform: [
+									{ translateX: camTx },
+									{ translateY: camTy },
+									{ scale: camScale },
+								],
+							},
+						]}
+					>
+						<Battlefield
+							heroes={state.heroes}
+							enemies={state.enemies}
+							currentActorId={state.currentActorId}
+							selectedTargetId={state.selectedTargetId}
+							selectedAction={state.selectedAction}
+							phase={state.phase}
+							targetAutoSelected={targetAutoSelected}
+							impactTargetId={focusTargetId}
+							impactActorId={focusActorId}
+							impactKey={lastFeedback?.id ?? null}
+							onSelectEnemy={selectEnemyTarget}
+							onSelectHero={onSelectHeroTarget}
+						/>
+					</Animated.View>
+
+					<CombatFeedback feedback={lastFeedback} />
+				</View>
 
 				<View style={styles.rightPanel}>
 					<Text style={styles.sectionLabel}>Objetivo</Text>
@@ -215,6 +335,14 @@ const styles = StyleSheet.create({
 	headerTitle: { color: '#e8e6e3', fontSize: 16, fontWeight: '700' },
 	headerMeta: { color: '#9a9690', fontSize: 12 },
 	body: { flex: 1, flexDirection: 'row', minHeight: 0 },
+	cameraClip: {
+		flex: 1,
+		overflow: 'hidden',
+		position: 'relative',
+	},
+	cameraStage: {
+		flex: 1,
+	},
 	rightPanel: {
 		width: '22%',
 		padding: 12,
