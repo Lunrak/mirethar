@@ -24,8 +24,9 @@ type Props = {
 
 const ENCOUNTER_OPTS: { id: EncounterType; label: string; hint: string }[] = [
 	{ id: 'vermin', label: 'Vermin', hint: 'Enjambre débil, sin XP' },
-	{ id: 'minion', label: 'Minions', hint: 'Grupo típico de sala' },
+	{ id: 'minion', label: 'Minions', hint: 'Grupo típico · trolls regeneran' },
 	{ id: 'boss', label: 'Boss', hint: 'Jefe · 1 tirada XP' },
+	{ id: 'weird', label: 'Weird', hint: 'Monstruo raro · 1 tirada XP' },
 ];
 
 export default function SetupScreen({ onStart }: Props) {
