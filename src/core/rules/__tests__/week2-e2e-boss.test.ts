@@ -185,29 +185,31 @@ describe('Week 2 E2E – 4 héroes vs Boss', () => {
 	});
 
 	it('Heridas de boss se acumulan hasta 0 life', () => {
+		// Ogre: 6 life, sin mirada de apertura (Medusa petrifica y falsea el test)
 		const party = createDefaultParty();
-		const boss = makeBoss('boss_medusa'); // 4 life
+		const boss = makeBoss('boss_ogre');
 		let state = createCombat(party, [boss]);
 
 		let hits = 0;
-		while (!state.isFinished && hits < 30) {
+		while (!state.isFinished && hits < 40) {
 			hits++;
 			if (state.phase === 'heroTurn') {
 				const t = getAliveEnemies(state.enemies)[0];
 				if (!t) break;
 				state = selectAction(state, attack);
 				state = selectTarget(state, t.id);
-				// Explosive altos
+				// Explosive altos → varias heridas por golpe
 				state = executeHeroAttack(state, 'boss', {}, seqRng([6, 5]));
 			} else if (state.phase === 'enemyTurn') {
-				state = runEnemyTurn(state, { rng: seqRng([6, 2]) });
+				// Defensa siempre éxito (natural 6) para no morir antes
+				state = runEnemyTurn(state, { rng: seqRng([6]) });
 			} else break;
 		}
 
 		expect(state.result).toBe('victory');
 		expect(state.enemies[0].currentLife).toBe(0);
 		console.log(
-			`Medusa derrotada en ${state.round} rondas tras ${hits} acciones.`,
+			`Ogre derrotado en ${state.round} rondas tras ${hits} acciones.`,
 		);
 	});
 });

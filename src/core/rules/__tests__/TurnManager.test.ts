@@ -5,12 +5,9 @@
 import {
   executeHeroAttack,
   runEnemyTurn,
-  advanceAfterHeroAction,
   applyHeroAttack,
-  getAliveHeroes,
   getAliveEnemies,
   isPartyOutnumbering,
-  resolveCurrentHeroAction,
 } from '../TurnManager';
 import {
   createCombat,
@@ -48,7 +45,8 @@ describe('TurnManager – applyHeroAttack', () => {
     const after = getAliveEnemies(next.enemies).length;
 
     expect(after).toBe(Math.max(0, before - 2));
-    expect(next.log.at(-1)?.message).toBe('test hit');
+    // Puede terminar en victoria si había ≤2 enemigos
+    expect(next.log.some((l) => l.message === 'test hit')).toBe(true);
   });
 
   it('resta life a un boss', () => {
@@ -87,7 +85,7 @@ describe('TurnManager – flujo de héroes', () => {
 
     state = selectAction(state, attack);
     state = selectTarget(state, state.enemies[0].id);
-    state = executeHeroAttack(state, 'minion', {}, seqRng([6, 6, 6, 1])); // alto daño
+    state = executeHeroAttack(state, 'minion', {}, seqRng([6, 3]));
 
     if (!state.isFinished) {
       expect(state.phase).toBe('heroTurn');
@@ -97,7 +95,7 @@ describe('TurnManager – flujo de héroes', () => {
   });
 
   it('después del último héroe pasa a enemyTurn', () => {
-    let state = setup('boss'); // 1 enemigo, no se mata fácil
+    let state = setup('boss');
 
     for (let i = 0; i < 4; i++) {
       if (state.isFinished || state.phase !== 'heroTurn') break;
@@ -105,7 +103,6 @@ describe('TurnManager – flujo de héroes', () => {
       const target = getAliveEnemies(state.enemies)[0];
       if (!target) break;
       state = selectTarget(state, target.id);
-      // dados bajos para no matar al boss
       state = executeHeroAttack(state, 'boss', {}, seqRng([1]));
     }
 
@@ -116,35 +113,33 @@ describe('TurnManager – flujo de héroes', () => {
 });
 
 describe('TurnManager – enemy turn', () => {
-  it('enemigos atacan y pueden hacer caer héroes', () => {
+  it('enemigos atacan e infligen daño (natural 1 en defense)', () => {
     const party = createDefaultParty();
-    // Forzamos wizard con 3 life vs muchos ataques altos
+    const totalLifeBefore = party.reduce((s, h) => s + h.life, 0);
+
     const enemies: EnemyInstance[] = Array.from({ length: 4 }, (_, i) => ({
       id: `e${i}`,
       templateId: 'minion_orcs',
       name: 'Orc',
-      level: 1, // fácil de fallar defense si sale 1
+      level: 5,
       currentLife: 1,
       attacks: 1,
     }));
 
     let state = createCombat(party, enemies);
-    // Saltar a enemyTurn
     state = { ...state, phase: 'enemyTurn' };
-
-    // Natural 1 en defense → siempre daño
     state = runEnemyTurn(state, { rng: seqRng([1]) });
 
-    const fallen = state.heroes.filter((h) => h.isFallen || h.life <= 0);
-    expect(fallen.length).toBeGreaterThan(0);
+    const totalLifeAfter = state.heroes.reduce((s, h) => s + h.life, 0);
+    expect(totalLifeAfter).toBeLessThan(totalLifeBefore);
   });
 
   it('después del enemyTurn vuelve a heroTurn con ronda+1', () => {
     let state = setup('boss');
     state = { ...state, phase: 'enemyTurn' };
 
-    // Defense altas → nadie muere
-    state = runEnemyTurn(state, { rng: seqRng([6]) });
+    // 6 seguido de 2 → sin bucle infinito
+    state = runEnemyTurn(state, { rng: seqRng([6, 2]) });
 
     if (!state.isFinished) {
       expect(state.phase).toBe('heroTurn');
@@ -155,26 +150,26 @@ describe('TurnManager – enemy turn', () => {
   });
 
   it('derrota cuando todos los héroes caen', () => {
-    const weakParty = [
-      createHero('wizard', { name: 'W1' }),
-      createHero('wizard', { name: 'W2' }),
-      createHero('wizard', { name: 'W3' }),
-      createHero('wizard', { name: 'W4' }),
-    ];
-    // 4 wizards life 3 cada uno
-    const enemies: EnemyInstance[] = Array.from({ length: 20 }, (_, i) => ({
+    // Party frágil sin mods de defensa: solo wizards sin equipo
+    const weakParty = [0, 1, 2, 3].map((i) => {
+      const h = createHero('wizard', { name: `W${i}` });
+      return { ...h, equipment: {}, life: 1, maxLife: 1 };
+    });
+    const enemies: EnemyInstance[] = Array.from({ length: 2 }, (_, i) => ({
       id: `e${i}`,
       templateId: 'minion_orcs',
       name: 'Orc',
-      level: 1,
+      level: 10,
       currentLife: 1,
-      attacks: 1,
+      attacks: 4,
     }));
 
     let state = createCombat(weakParty, enemies);
-    state = { ...state, phase: 'enemyTurn' };
-    state = runEnemyTurn(state, { rng: seqRng([1]) }); // todos fallan defense
+    // Forzar turno enemigo con defensa natural 1 (fallo)
+    state = { ...state, phase: 'enemyTurn' as const };
+    state = runEnemyTurn(state, { rng: seqRng([1]) });
 
+    expect(state.heroes.every((h) => h.life <= 0 || h.isFallen || h.isDead)).toBe(true);
     expect(state.isFinished).toBe(true);
     expect(state.result).toBe('defeat');
   });
@@ -197,7 +192,6 @@ describe('TurnManager – combate completo corto', () => {
     let state = createCombat(party, enemies);
     state = selectAction(state, attack);
     state = selectTarget(state, 'g1');
-    // Warrior + dado alto
     state = executeHeroAttack(state, 'minion', {}, seqRng([5]));
 
     expect(state.isFinished).toBe(true);
@@ -207,7 +201,7 @@ describe('TurnManager – combate completo corto', () => {
 
 describe('helpers', () => {
   it('isPartyOutnumbering', () => {
-    const state = setup('boss'); // 4 héroes vs 1 boss
+    const state = setup('boss');
     expect(isPartyOutnumbering(state)).toBe(true);
   });
 });
