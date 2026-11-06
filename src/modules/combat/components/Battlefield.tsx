@@ -1,13 +1,21 @@
 /**
  * Campo de batalla – selección de objetivo tocando unidades
  * Héroes (izq) / Enemigos (der). Targets ≥ 48 dp para dos pulgares.
- * Día 18: animación de impacto en actor/objetivo.
+ * Día 18: animación de impacto.
+ * Día 19: life bar, objetivo primario, estados, silueta por equipo.
  */
 
 import React, { useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, Pressable, Animated } from 'react-native';
 import type { Hero, EnemyInstance, Action } from '../../../core/types/combat';
 import { getHeroStatus } from '../../../core/rules/HeroStatus';
+import {
+	HeroGearIcons,
+	LifeBar,
+	StatusBadges,
+	PrimaryTargetMarker,
+	statusLabel,
+} from './UnitVisuals';
 
 type Props = {
 	heroes: Hero[];
@@ -27,18 +35,6 @@ type Props = {
 	/** Cambia en cada resolución para reiniciar animación */
 	impactKey?: string | null;
 };
-
-/** Iconos temporales por clase (MVP) */
-const CLASS_ICON: Record<Hero['class'], string> = {
-	warrior: '⚔️',
-	rogue: '🗡️',
-	cleric: '✝️',
-	wizard: '🔮',
-};
-
-function lifePct(cur: number, max: number) {
-	return `${Math.max(0, Math.min(100, Math.round((cur / Math.max(1, max)) * 100)))}%`;
-}
 
 function useImpactAnim(active: boolean, key: string | null | undefined) {
 	const scale = useRef(new Animated.Value(1)).current;
@@ -89,19 +85,17 @@ function useImpactAnim(active: boolean, key: string | null | undefined) {
 function UnitCardShell({
 	activeImpact,
 	impactKey,
+	isPrimaryTarget,
 	children,
 	style,
 }: {
 	activeImpact: boolean;
 	impactKey?: string | null;
+	isPrimaryTarget?: boolean;
 	children: React.ReactNode;
 	style: object | object[];
 }) {
 	const { scale, glow } = useImpactAnim(activeImpact, impactKey);
-	const borderExtra = glow.interpolate({
-		inputRange: [0, 1],
-		outputRange: [0, 1],
-	});
 
 	return (
 		<Animated.View
@@ -109,16 +103,12 @@ function UnitCardShell({
 				style,
 				{
 					transform: [{ scale }],
-					// glow vía opacity de un overlay interno no es trivial con border;
-					// usamos scale + ligera elevación visual del contenedor
-					opacity: borderExtra.interpolate({
-						inputRange: [0, 1],
-						outputRange: [1, 1],
-					}),
 				},
 				activeImpact && { zIndex: 2 },
+				isPrimaryTarget && styles.cardPrimaryTarget,
 			]}
 		>
+			<PrimaryTargetMarker visible={!!isPrimaryTarget} />
 			{children}
 			{activeImpact && (
 				<Animated.View
@@ -163,7 +153,6 @@ export function Battlefield({
 		(selectedAction?.type === 'heal' || selectedAction?.name === 'Protect');
 
 	const canTap = phase === 'heroTurn';
-	// Solo pedir toque de enemigo si hace falta elegir (objetivos distintos)
 	const showEnemyPickHint =
 		canTap && targetingEnemy && !targetAutoSelected && !selectedTargetId;
 	const showHeroPickHint = canTap && targetingHero && !selectedTargetId;
@@ -187,23 +176,27 @@ export function Battlefield({
 						const down = h.isFallen || h.isDead || h.life <= 0;
 						const active = h.id === currentActorId;
 						const selected = h.id === selectedTargetId;
+						const isPrimary =
+							selected && (targetingHero || phase === 'heroTurn');
 						const selectable = canTap && targetingHero && !down;
-						const icon = CLASS_ICON[h.class] ?? '👤';
 						const hit =
 							impactKey != null &&
 							(h.id === impactTargetId || h.id === impactActorId);
+						const st = getHeroStatus(h);
 
 						return (
 							<UnitCardShell
 								key={h.id}
 								activeImpact={!!hit}
 								impactKey={impactKey}
+								isPrimaryTarget={!!isPrimary}
 								style={[
 									styles.card,
 									active && styles.cardActive,
 									selected && styles.cardSelectedHero,
 									down && styles.cardDown,
 									selectable && styles.cardSelectable,
+									st === 'dead' && styles.cardDead,
 								]}
 							>
 								<Pressable
@@ -214,31 +207,29 @@ export function Battlefield({
 										pressed && selectable && styles.cardPressed,
 									]}
 									accessibilityRole="button"
-									accessibilityLabel={`${h.name}, ${h.class}, ${getHeroStatus(h)}, ${h.life} de ${h.maxLife}`}
+									accessibilityLabel={`${h.name}, ${h.class}, ${statusLabel(st)}, ${h.life} de ${h.maxLife}`}
 								>
-									<View style={styles.nameRow}>
-										<Text style={styles.icon}>{icon}</Text>
-										<Text
-											style={styles.name}
-											numberOfLines={1}
-										>
-											{h.name}
-										</Text>
+									<View style={styles.heroTop}>
+										<HeroGearIcons hero={h} />
+										<View style={styles.heroText}>
+											<Text
+												style={styles.name}
+												numberOfLines={1}
+											>
+												{h.name}
+											</Text>
+											<Text style={styles.meta}>
+												{h.class}
+												{active ? ' · turno' : ''}
+											</Text>
+										</View>
 									</View>
-									<Text style={styles.meta}>
-										{h.class} · {getHeroStatus(h)}
-									</Text>
-									<View style={styles.barTrack}>
-										<View
-											style={[
-												styles.barHero,
-												{ width: lifePct(h.life, h.maxLife) },
-											]}
-										/>
-									</View>
-									<Text style={styles.hp}>
-										{h.life}/{h.maxLife}
-									</Text>
+									<StatusBadges hero={h} />
+									<LifeBar
+										current={h.life}
+										max={h.maxLife}
+										isEnemy={false}
+									/>
 								</Pressable>
 							</UnitCardShell>
 						);
@@ -253,17 +244,22 @@ export function Battlefield({
 					{enemies.map((e) => {
 						const dead = e.currentLife <= 0;
 						const selected = e.id === selectedTargetId;
+						const isPrimary =
+							selected && (targetingEnemy || targetAutoSelected);
 						const selectable =
 							canTap && targetingEnemy && !dead && !targetAutoSelected;
 						const hit =
 							impactKey != null &&
 							(e.id === impactTargetId || e.id === impactActorId);
+						// Para minions 1 life el max visual es al menos 1
+						const maxLife = Math.max(e.currentLife, 1);
 
 						return (
 							<UnitCardShell
 								key={e.id}
 								activeImpact={!!hit}
 								impactKey={impactKey}
+								isPrimaryTarget={!!isPrimary}
 								style={[
 									styles.card,
 									styles.cardEnemy,
@@ -282,29 +278,28 @@ export function Battlefield({
 									accessibilityRole="button"
 									accessibilityLabel={`${e.name}, level ${e.level}, life ${e.currentLife}`}
 								>
-									<Text
-										style={styles.name}
-										numberOfLines={1}
-									>
-										{e.name}
-									</Text>
-									<Text style={styles.meta}>L{e.level}</Text>
-									<View style={styles.barTrack}>
-										<View
-											style={[
-												styles.barEnemy,
-												{
-													width: dead
-														? '0%'
-														: lifePct(
-																e.currentLife,
-																Math.max(e.currentLife, 1),
-															),
-												},
-											]}
-										/>
+									<View style={styles.enemyTop}>
+										<Text style={styles.enemyIcon}>
+											{e.isUndead ? '💀' : '👹'}
+										</Text>
+										<View style={{ flex: 1 }}>
+											<Text
+												style={styles.name}
+												numberOfLines={1}
+											>
+												{e.name}
+											</Text>
+											<Text style={styles.meta}>
+												L{e.level} · Atk {e.attacks}
+											</Text>
+										</View>
 									</View>
-									<Text style={styles.hp}>{e.currentLife}</Text>
+									<StatusBadges enemy={e} />
+									<LifeBar
+										current={dead ? 0 : e.currentLife}
+										max={maxLife}
+										isEnemy
+									/>
 								</Pressable>
 							</UnitCardShell>
 						);
@@ -336,7 +331,7 @@ const styles = StyleSheet.create({
 		alignItems: 'center',
 		justifyContent: 'space-evenly',
 	},
-	col: { flex: 1, maxWidth: 180 },
+	col: { flex: 1, maxWidth: 190 },
 	colTitle: {
 		color: '#6b6760',
 		fontSize: 11,
@@ -345,7 +340,7 @@ const styles = StyleSheet.create({
 		letterSpacing: 1,
 	},
 	card: {
-		minHeight: 56,
+		minHeight: 64,
 		marginBottom: 10,
 		paddingVertical: 8,
 		paddingHorizontal: 10,
@@ -353,30 +348,32 @@ const styles = StyleSheet.create({
 		borderRadius: 10,
 		borderWidth: 2,
 		borderColor: '#3a3a45',
-		overflow: 'hidden',
+		overflow: 'visible',
+		position: 'relative',
 	},
 	cardEnemy: { backgroundColor: '#2a1e1e' },
 	cardActive: { borderColor: '#c9a227' },
 	cardSelectedHero: { borderColor: '#5dce7a', backgroundColor: '#1e2a22' },
 	cardSelectedEnemy: { borderColor: '#e55', backgroundColor: '#3a2020' },
+	cardPrimaryTarget: {
+		borderColor: '#e55',
+		shadowColor: '#e55',
+		shadowOpacity: 0.45,
+		shadowRadius: 6,
+		shadowOffset: { width: 0, height: 0 },
+		elevation: 4,
+	},
 	cardSelectable: { borderColor: '#4a6a50' },
 	cardSelectableEnemy: { borderColor: '#6a4040' },
 	cardPressed: { transform: [{ scale: 0.97 }], opacity: 0.9 },
-	cardDown: { opacity: 0.35 },
-	nameRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
-	icon: { fontSize: 16 },
-	name: { color: '#e8e6e3', fontSize: 14, fontWeight: '700', flexShrink: 1 },
-	meta: { color: '#6b6760', fontSize: 11, marginTop: 2 },
-	barTrack: {
-		height: 6,
-		backgroundColor: '#333',
-		borderRadius: 3,
-		overflow: 'hidden',
-		marginTop: 6,
-	},
-	barHero: { height: '100%', backgroundColor: '#3d8b5f' },
-	barEnemy: { height: '100%', backgroundColor: '#a33' },
-	hp: { color: '#6b6760', fontSize: 11, marginTop: 2 },
+	cardDown: { opacity: 0.4 },
+	cardDead: { opacity: 0.3, borderColor: '#333' },
+	heroTop: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+	heroText: { flex: 1, minWidth: 0 },
+	enemyTop: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+	enemyIcon: { fontSize: 22 },
+	name: { color: '#e8e6e3', fontSize: 14, fontWeight: '700' },
+	meta: { color: '#6b6760', fontSize: 11, marginTop: 1 },
 	vs: {
 		color: '#5a5650',
 		fontSize: 14,
