@@ -1,13 +1,15 @@
 /**
  * Pantalla de combate – landscape, dos pulgares
- * Día 18: feedback + zoom
- * Día 19: unidades visuales
- * Día 20: log scrollable + panel de objetivo legible a distancia de brazo
+ * Recibe sesión ya creada (Core Loop) o crea una por defecto.
  */
 
 import React, { useEffect, useRef, useMemo } from 'react';
 import { View, Text, StyleSheet, Animated, Easing } from 'react-native';
-import { useCombatSession } from '../hooks/useCombatSession';
+import {
+	useCombatSession,
+	type CombatSession,
+	type CombatSessionConfig,
+} from '../hooks/useCombatSession';
 import { CentralDice } from '../components/CentralDice';
 import { ActionPanel } from '../components/ActionPanel';
 import { Battlefield } from '../components/Battlefield';
@@ -21,14 +23,27 @@ const BASE_ACTIONS: Action[] = [
 	{ type: 'defend', name: 'Defend', requiresTarget: false },
 ];
 
-/** Duración del zoom-in / hold / zoom-out (total ~1.1 s dentro de 0.8–1.2) */
 const ZOOM_IN_MS = 280;
 const ZOOM_HOLD_MS = 520;
 const ZOOM_OUT_MS = 320;
 const RESULT_AUTO_ACK_MS = 1150;
 
-export default function CombatScreen() {
-	const session = useCombatSession('minion');
+type Props = {
+	/** Config para crear sesión interna, o sesión ya levantada desde el flow */
+	config?: CombatSessionConfig;
+	session?: CombatSession;
+	/** Cuando el combate termina (victoria/derrota) */
+	onCombatEnd?: (session: CombatSession) => void;
+};
+
+export default function CombatScreen({
+	config,
+	session: externalSession,
+	onCombatEnd,
+}: Props) {
+	const internal = useCombatSession(config ?? 'minion');
+	const session = externalSession ?? internal;
+
 	const {
 		state,
 		diceUi,
@@ -45,6 +60,7 @@ export default function CombatScreen() {
 	} = session;
 
 	const spinTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+	const endedRef = useRef(false);
 	const currentHero = state.heroes.find((h) => h.id === state.currentActorId);
 	const selectedTargetEnemy = state.enemies.find(
 		(e) => e.id === state.selectedTargetId,
@@ -53,7 +69,6 @@ export default function CombatScreen() {
 		(h) => h.id === state.selectedTargetId,
 	);
 
-	// Cámara: scale + translate hacia actor/objetivo
 	const camScale = useRef(new Animated.Value(1)).current;
 	const camTx = useRef(new Animated.Value(0)).current;
 	const camTy = useRef(new Animated.Value(0)).current;
@@ -74,7 +89,6 @@ export default function CombatScreen() {
 		return list;
 	}, [currentHero?.class]);
 
-	/** Zoom hacia el lado del objetivo (enemigos derecha / héroes izquierda) */
 	const runCameraZoom = (actorId: string | null, targetId: string | null) => {
 		const isEnemyTarget =
 			!!targetId && state.enemies.some((e) => e.id === targetId);
@@ -145,7 +159,6 @@ export default function CombatScreen() {
 		]).start();
 	};
 
-	// Al entrar en resultado: zoom + auto-acknowledge
 	useEffect(() => {
 		if (diceUi === 'result') {
 			runCameraZoom(focusActorId, focusTargetId);
@@ -159,6 +172,14 @@ export default function CombatScreen() {
 		}
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [diceUi, focusActorId, focusTargetId]);
+
+	// Notificar fin de combate al flow
+	useEffect(() => {
+		if (state.isFinished && !endedRef.current) {
+			endedRef.current = true;
+			onCombatEnd?.(session);
+		}
+	}, [state.isFinished, onCombatEnd, session]);
 
 	const onDicePress = () => {
 		if (diceUi === 'ready') resolveDice();
@@ -177,7 +198,6 @@ export default function CombatScreen() {
 
 	return (
 		<View style={styles.root}>
-			{/* Cabecera compacta pero legible */}
 			<View style={styles.header}>
 				<Text style={styles.headerTitle}>Combate</Text>
 				<Text style={styles.headerMeta}>
@@ -188,7 +208,6 @@ export default function CombatScreen() {
 				</Text>
 			</View>
 
-			{/* Cuerpo landscape: acciones | campo | objetivo */}
 			<View style={styles.body}>
 				<ActionPanel
 					actions={actions}
@@ -240,7 +259,6 @@ export default function CombatScreen() {
 				/>
 			</View>
 
-			{/* Log inferior: alto suficiente para leer a distancia de brazo */}
 			<View style={styles.logSlot}>
 				<CombatLog entries={state.log} />
 			</View>
@@ -256,10 +274,7 @@ export default function CombatScreen() {
 }
 
 const styles = StyleSheet.create({
-	root: {
-		flex: 1,
-		backgroundColor: '#1a1a1e',
-	},
+	root: { flex: 1, backgroundColor: '#1a1a1e' },
 	header: {
 		height: 48,
 		paddingHorizontal: 16,
@@ -270,32 +285,10 @@ const styles = StyleSheet.create({
 		borderBottomWidth: 1,
 		borderBottomColor: '#2a2a32',
 	},
-	headerTitle: {
-		color: '#e8e6e3',
-		fontSize: 18,
-		fontWeight: '800',
-	},
-	headerMeta: {
-		color: '#b8b4ae',
-		fontSize: 14,
-		fontWeight: '600',
-	},
-	body: {
-		flex: 1,
-		flexDirection: 'row',
-		minHeight: 0,
-	},
-	cameraClip: {
-		flex: 1,
-		overflow: 'hidden',
-		position: 'relative',
-	},
-	cameraStage: {
-		flex: 1,
-	},
-	/** ~22–26 % de alto en landscape; texto 15+ legible a brazo */
-	logSlot: {
-		height: 120,
-		paddingRight: 110, // hueco para el dado
-	},
+	headerTitle: { color: '#e8e6e3', fontSize: 18, fontWeight: '800' },
+	headerMeta: { color: '#b8b4ae', fontSize: 14, fontWeight: '600' },
+	body: { flex: 1, flexDirection: 'row', minHeight: 0 },
+	cameraClip: { flex: 1, overflow: 'hidden', position: 'relative' },
+	cameraStage: { flex: 1 },
+	logSlot: { height: 120, paddingRight: 110 },
 });

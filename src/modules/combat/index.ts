@@ -1,4 +1,7 @@
 export { default as CombatScreen } from './screens/CombatScreen';
+export { default as CombatFlow } from './screens/CombatFlow';
+export { default as SetupScreen } from './screens/SetupScreen';
+export { default as ResultsScreen } from './screens/ResultsScreen';
 export { CentralDice } from './components/CentralDice';
 export { ActionPanel } from './components/ActionPanel';
 export { Battlefield } from './components/Battlefield';
@@ -16,4 +19,8 @@ export {
 	PrimaryTargetMarker,
 } from './components/UnitVisuals';
 export { useCombatSession } from './hooks/useCombatSession';
-export type { DiceUiState, CombatSession } from './hooks/useCombatSession';
+export type {
+	DiceUiState,
+	CombatSession,
+	CombatSessionConfig,
+} from './hooks/useCombatSession';

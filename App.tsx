@@ -1,9 +1,10 @@
 import { StatusBar } from 'expo-status-bar';
 import { StyleSheet, Text, View } from 'react-native';
 import { CombatScreen } from './src/modules/combat';
+import { CombatFlow } from './src/modules/combat';
 
 export default function App() {
-	return <CombatScreen />;
+	return <CombatFlow />;
 }
 
 // export default function App() {
