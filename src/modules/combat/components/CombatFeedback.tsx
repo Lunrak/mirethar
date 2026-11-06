@@ -1,8 +1,6 @@
 /**
- * Feedback visual de resolución – GDD Día 18
- * - Números flotantes de daño / cura
- * - Texto de resultado (ÉXITO / FALLO / cura…)
- * - Flash de impacto en el objetivo
+ * Feedback visual de resolución – Día 18 + pulido Día 24
+ * Nunca ambiguo: headline grande, detalle legible, color por tipo.
  */
 
 import React, { useEffect, useRef } from 'react';
@@ -13,11 +11,8 @@ export type FeedbackKind = 'damage' | 'heal' | 'miss' | 'info' | 'critical';
 export type CombatFeedbackData = {
 	id: string;
 	kind: FeedbackKind;
-	/** Valor numérico (daño o cura). 0 en miss/info */
 	amount: number;
-	/** Texto corto centrado (ej. "ÉXITO", "FALLO", "+4") */
 	headline: string;
-	/** Mensaje completo del log (opcional, más pequeño) */
 	detail?: string;
 	actorId?: string | null;
 	targetId?: string | null;
@@ -25,73 +20,82 @@ export type CombatFeedbackData = {
 
 type Props = {
 	feedback: CombatFeedbackData | null;
-	/** Se llama cuando termina la secuencia visual (~1 s) */
 	onDone?: () => void;
+};
+
+const KIND_LABEL: Record<FeedbackKind, string> = {
+	damage: 'IMPACTO',
+	heal: 'CURACIÓN',
+	miss: 'FALLO',
+	info: 'INFO',
+	critical: 'CRÍTICO',
 };
 
 export function CombatFeedback({ feedback, onDone }: Props) {
 	const opacity = useRef(new Animated.Value(0)).current;
 	const rise = useRef(new Animated.Value(0)).current;
-	const scale = useRef(new Animated.Value(0.6)).current;
+	const scale = useRef(new Animated.Value(0.7)).current;
 	const flash = useRef(new Animated.Value(0)).current;
 
 	useEffect(() => {
 		if (!feedback) {
 			opacity.setValue(0);
 			rise.setValue(0);
-			scale.setValue(0.6);
+			scale.setValue(0.7);
 			flash.setValue(0);
 			return;
 		}
 
 		opacity.setValue(0);
 		rise.setValue(0);
-		scale.setValue(0.55);
+		scale.setValue(0.7);
 		flash.setValue(0);
 
+		// Secuencia ~1.05 s: entrada 0.15 → hold 0.55 → salida 0.35
 		const anim = Animated.sequence([
-			// Entrada + impacto
 			Animated.parallel([
 				Animated.timing(opacity, {
 					toValue: 1,
-					duration: 120,
+					duration: 150,
+					easing: Easing.out(Easing.cubic),
 					useNativeDriver: true,
 				}),
 				Animated.spring(scale, {
-					toValue: 1.15,
-					friction: 5,
-					tension: 140,
-					useNativeDriver: true,
-				}),
-				Animated.timing(flash, {
 					toValue: 1,
-					duration: 90,
+					friction: 6,
+					tension: 120,
 					useNativeDriver: true,
 				}),
+				Animated.sequence([
+					Animated.timing(flash, {
+						toValue: 1,
+						duration: 80,
+						useNativeDriver: true,
+					}),
+					Animated.timing(flash, {
+						toValue: 0,
+						duration: 220,
+						useNativeDriver: true,
+					}),
+				]),
 				Animated.timing(rise, {
 					toValue: 1,
-					duration: 900,
+					duration: 700,
 					easing: Easing.out(Easing.cubic),
 					useNativeDriver: true,
 				}),
 			]),
-			// Hold breve
-			Animated.delay(180),
-			// Salida
+			Animated.delay(280),
 			Animated.parallel([
 				Animated.timing(opacity, {
 					toValue: 0,
-					duration: 280,
+					duration: 320,
+					easing: Easing.in(Easing.cubic),
 					useNativeDriver: true,
 				}),
 				Animated.timing(scale, {
-					toValue: 0.9,
-					duration: 280,
-					useNativeDriver: true,
-				}),
-				Animated.timing(flash, {
-					toValue: 0,
-					duration: 200,
+					toValue: 0.92,
+					duration: 320,
 					useNativeDriver: true,
 				}),
 			]),
@@ -110,27 +114,27 @@ export function CombatFeedback({ feedback, onDone }: Props) {
 	const isMiss = feedback.kind === 'miss';
 	const isCrit = feedback.kind === 'critical';
 	const showNumber =
-		feedback.amount > 0 && (feedback.kind === 'damage' || isHeal || isCrit);
+		(feedback.kind === 'damage' || isHeal || isCrit) && feedback.amount > 0;
 
-	const numberColor = isHeal ? '#5dce7a' : isCrit ? '#ffd666' : '#e85d5d';
-	const headlineColor = isMiss
-		? '#9a9690'
+	const numberColor = isHeal ? '#5dce7a' : isCrit ? '#ffd666' : '#ff6b6b';
+	const bannerBorder = isMiss
+		? '#6b6760'
 		: isHeal
-			? '#5dce7a'
+			? '#3d8b5f'
 			: isCrit
-				? '#ffd666'
+				? '#c9a227'
 				: feedback.kind === 'damage'
-					? '#e8c547'
-					: '#e8e6e3';
+					? '#a33'
+					: '#4a4a55';
 
 	const translateY = rise.interpolate({
 		inputRange: [0, 1],
-		outputRange: [12, -48],
+		outputRange: [8, -40],
 	});
 
 	const flashOpacity = flash.interpolate({
-		inputRange: [0, 0.4, 1],
-		outputRange: [0, 0.55, 0],
+		inputRange: [0, 1],
+		outputRange: [0, isMiss ? 0.2 : 0.4],
 	});
 
 	return (
@@ -138,51 +142,67 @@ export function CombatFeedback({ feedback, onDone }: Props) {
 			style={styles.root}
 			pointerEvents="none"
 		>
-			{/* Flash de impacto a pantalla completa (suave) */}
 			<Animated.View
 				style={[
 					styles.flash,
 					{
 						opacity: flashOpacity,
-						backgroundColor: isHeal ? '#2a5a3a' : isMiss ? '#333' : '#6a2020',
+						backgroundColor: isHeal
+							? '#1e3a2a'
+							: isMiss
+								? '#2a2a2a'
+								: '#4a1818',
 					},
 				]}
 			/>
 
-			{/* Número flotante */}
 			{showNumber && (
 				<Animated.View
 					style={[
 						styles.floatWrap,
-						{
-							opacity,
-							transform: [{ translateY }, { scale }],
-						},
+						{ opacity, transform: [{ translateY }, { scale }] },
 					]}
 				>
 					<Text style={[styles.floatNum, { color: numberColor }]}>
-						{isHeal ? `+${feedback.amount}` : `-${feedback.amount}`}
+						{isHeal ? `+${feedback.amount}` : `−${feedback.amount}`}
+					</Text>
+					<Text style={[styles.floatSub, { color: numberColor }]}>
+						{isHeal ? 'vida' : feedback.amount === 1 ? 'herida' : 'heridas'}
 					</Text>
 				</Animated.View>
 			)}
 
-			{/* Headline de resultado */}
 			<Animated.View
 				style={[
 					styles.banner,
 					{
 						opacity,
 						transform: [{ scale }],
+						borderColor: bannerBorder,
 					},
 				]}
 			>
-				<Text style={[styles.headline, { color: headlineColor }]}>
+				<Text style={styles.kindTag}>{KIND_LABEL[feedback.kind]}</Text>
+				<Text
+					style={[
+						styles.headline,
+						{
+							color: isMiss
+								? '#c0bcb6'
+								: isHeal
+									? '#5dce7a'
+									: isCrit
+										? '#ffd666'
+										: '#f0eee9',
+						},
+					]}
+				>
 					{feedback.headline}
 				</Text>
 				{feedback.detail ? (
 					<Text
 						style={styles.detail}
-						numberOfLines={2}
+						numberOfLines={3}
 					>
 						{feedback.detail}
 					</Text>
@@ -204,36 +224,52 @@ const styles = StyleSheet.create({
 	},
 	floatWrap: {
 		position: 'absolute',
-		top: '38%',
+		top: '32%',
 		alignItems: 'center',
 	},
 	floatNum: {
-		fontSize: 42,
+		fontSize: 48,
 		fontWeight: '900',
-		textShadowColor: 'rgba(0,0,0,0.85)',
+		textShadowColor: 'rgba(0,0,0,0.9)',
 		textShadowOffset: { width: 0, height: 2 },
-		textShadowRadius: 6,
+		textShadowRadius: 8,
+	},
+	floatSub: {
+		fontSize: 14,
+		fontWeight: '700',
+		marginTop: -2,
+		textTransform: 'uppercase',
+		letterSpacing: 1,
+		opacity: 0.9,
 	},
 	banner: {
-		marginTop: 28,
-		paddingHorizontal: 18,
-		paddingVertical: 10,
-		borderRadius: 12,
-		backgroundColor: 'rgba(18,18,22,0.88)',
-		borderWidth: 1,
-		borderColor: '#3a3a45',
-		maxWidth: '78%',
+		marginTop: 36,
+		paddingHorizontal: 20,
+		paddingVertical: 12,
+		borderRadius: 14,
+		backgroundColor: 'rgba(12,12,16,0.92)',
+		borderWidth: 2,
+		maxWidth: '82%',
 		alignItems: 'center',
 	},
-	headline: {
-		fontSize: 22,
+	kindTag: {
+		color: '#7a7670',
+		fontSize: 11,
 		fontWeight: '800',
-		letterSpacing: 1,
+		letterSpacing: 1.5,
+		marginBottom: 4,
+	},
+	headline: {
+		fontSize: 26,
+		fontWeight: '900',
+		letterSpacing: 0.5,
+		textAlign: 'center',
 	},
 	detail: {
-		marginTop: 4,
-		color: '#9a9690',
-		fontSize: 12,
+		marginTop: 8,
+		color: '#b8b4ae',
+		fontSize: 14,
+		lineHeight: 20,
 		textAlign: 'center',
 	},
 });

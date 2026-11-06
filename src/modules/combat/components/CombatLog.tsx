@@ -59,6 +59,7 @@ export function CombatLog({ entries, maxVisible = 40 }: Props) {
 								key={entry.id}
 								style={[lineStyle(entry.message), isLast && styles.lineLatest]}
 							>
+								{isLast ? '▸ ' : '  '}
 								{entry.message}
 							</Text>
 						);
@@ -118,8 +119,12 @@ const styles = StyleSheet.create({
 		marginBottom: 4,
 	},
 	lineLatest: {
-		color: '#e8e6e3',
-		fontWeight: '700',
+		color: '#f5f2ea',
+		fontWeight: '800',
+		fontSize: 16,
+		lineHeight: 24,
+		marginTop: 4,
+		marginBottom: 6,
 	},
 	lineSuccess: {
 		color: '#7dcea0',

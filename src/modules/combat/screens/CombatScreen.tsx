@@ -23,10 +23,12 @@ const BASE_ACTIONS: Action[] = [
 	{ type: 'defend', name: 'Defend', requiresTarget: false },
 ];
 
-const ZOOM_IN_MS = 280;
-const ZOOM_HOLD_MS = 520;
-const ZOOM_OUT_MS = 320;
-const RESULT_AUTO_ACK_MS = 1150;
+/** Zoom total ~1.05 s alineado con CombatFeedback */
+const ZOOM_IN_MS = 220;
+const ZOOM_HOLD_MS = 480;
+const ZOOM_OUT_MS = 350;
+/** Auto-ack tras feedback completo (feedback ~1.05s + margen) */
+const RESULT_AUTO_ACK_MS = 1300;
 
 type Props = {
 	/** Config para crear sesión interna, o sesión ya levantada desde el flow */
@@ -199,13 +201,32 @@ export default function CombatScreen({
 	return (
 		<View style={styles.root}>
 			<View style={styles.header}>
-				<Text style={styles.headerTitle}>Combate</Text>
-				<Text style={styles.headerMeta}>
-					Ronda {state.round}
-					{currentHero ? `  ·  ${currentHero.name}` : ''}
-					{`  ·  ${state.phase}`}
-					{state.isFinished ? `  ·  ${state.result?.toUpperCase()}` : ''}
-				</Text>
+				<View>
+					<Text style={styles.headerTitle}>Combate</Text>
+					<Text style={styles.headerMeta}>
+						Ronda {state.round}
+						{state.isFinished
+							? `  ·  ${state.result === 'victory' ? '¡Victoria!' : 'Derrota'}`
+							: ''}
+					</Text>
+				</View>
+				<View style={styles.phasePill}>
+					<Text style={styles.phasePillText}>
+						{state.isFinished
+							? state.result === 'victory'
+								? 'FIN · Victoria'
+								: 'FIN · Derrota'
+							: diceUi === 'spinning'
+								? 'Resolviendo…'
+								: diceUi === 'result'
+									? 'Resultado'
+									: state.phase === 'enemyTurn'
+										? 'Turno enemigo'
+										: currentHero
+											? `Turno: ${currentHero.name}`
+											: 'Combate'}
+					</Text>
+				</View>
 			</View>
 
 			<View style={styles.body}>
@@ -286,7 +307,25 @@ const styles = StyleSheet.create({
 		borderBottomColor: '#2a2a32',
 	},
 	headerTitle: { color: '#e8e6e3', fontSize: 18, fontWeight: '800' },
-	headerMeta: { color: '#b8b4ae', fontSize: 14, fontWeight: '600' },
+	headerMeta: {
+		color: '#b8b4ae',
+		fontSize: 13,
+		fontWeight: '600',
+		marginTop: 2,
+	},
+	phasePill: {
+		paddingHorizontal: 14,
+		paddingVertical: 8,
+		borderRadius: 20,
+		backgroundColor: '#2a2a35',
+		borderWidth: 1,
+		borderColor: '#3a3a45',
+	},
+	phasePillText: {
+		color: '#f0d78c',
+		fontSize: 14,
+		fontWeight: '800',
+	},
 	body: { flex: 1, flexDirection: 'row', minHeight: 0 },
 	cameraClip: { flex: 1, overflow: 'hidden', position: 'relative' },
 	cameraStage: { flex: 1 },

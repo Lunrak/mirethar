@@ -110,25 +110,29 @@ function buildFeedback(
 	if (isHeal && heroDelta > 0) {
 		kind = 'heal';
 		amount = heroDelta;
-		headline = `+${heroDelta}`;
+		headline = `Cura +${heroDelta}`;
 	} else if (isMiss) {
 		kind = 'miss';
 		amount = 0;
-		headline = 'FALLO';
+		headline = 'Fallo — sin daño';
 	} else if (enemyDelta > 0) {
 		kind = isCrit ? 'critical' : 'damage';
 		amount = enemyDelta;
-		headline = isCrit ? '¡CRÍTICO!' : 'ÉXITO';
+		headline = isCrit
+			? `¡Crítico! −${enemyDelta}`
+			: enemyDelta === 1
+				? 'Éxito — 1 herida'
+				: `Éxito — ${enemyDelta} heridas`;
 	} else if (/ÉXITO/i.test(lastMsg)) {
 		kind = isCrit ? 'critical' : 'damage';
 		amount = Math.max(1, enemyDelta);
-		headline = isCrit ? '¡CRÍTICO!' : 'ÉXITO';
+		headline = isCrit ? '¡Crítico!' : 'Éxito';
 	} else if (/defiende/i.test(lastMsg)) {
 		kind = 'info';
-		headline = 'DEFENSA';
+		headline = 'En guardia';
 	} else {
 		kind = 'info';
-		headline = actionType === 'spell' ? 'HECHIZO' : 'RESULTADO';
+		headline = actionType === 'spell' ? 'Hechizo resuelto' : 'Acción resuelta';
 	}
 
 	return {
