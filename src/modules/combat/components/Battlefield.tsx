@@ -9,6 +9,7 @@ import React, { useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, Pressable, Animated } from 'react-native';
 import type { Hero, EnemyInstance, Action } from '../../../core/types/combat';
 import { getHeroStatus } from '../../../core/rules/HeroStatus';
+import { getEnemyMaxLife } from '../../../core/data/enemyLookup';
 import {
 	HeroGearIcons,
 	LifeBar,
@@ -251,8 +252,7 @@ export function Battlefield({
 						const hit =
 							impactKey != null &&
 							(e.id === impactTargetId || e.id === impactActorId);
-						// Para minions 1 life el max visual es al menos 1
-						const maxLife = Math.max(e.currentLife, 1);
+						const maxLife = getEnemyMaxLife(e);
 
 						return (
 							<UnitCardShell
@@ -276,7 +276,7 @@ export function Battlefield({
 										pressed && selectable && styles.cardPressed,
 									]}
 									accessibilityRole="button"
-									accessibilityLabel={`${e.name}, level ${e.level}, life ${e.currentLife}`}
+									accessibilityLabel={`${e.name}, level ${e.level}, life ${e.currentLife} de ${maxLife}`}
 								>
 									<View style={styles.enemyTop}>
 										<Text style={styles.enemyIcon}>

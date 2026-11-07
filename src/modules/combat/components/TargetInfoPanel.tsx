@@ -7,6 +7,7 @@ import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import type { Hero, EnemyInstance, Action } from '../../../core/types/combat';
 import { getHeroStatus } from '../../../core/rules/HeroStatus';
+import { getEnemyMaxLife } from '../../../core/data/enemyLookup';
 import {
 	LifeBar,
 	StatusBadges,
@@ -62,7 +63,7 @@ export function TargetInfoPanel({
 						style={styles.name}
 						numberOfLines={2}
 					>
-						{enemy.name}
+						{enemy.name.replace(/\s*\(.*\)$/, '')}
 					</Text>
 					<Text style={styles.kind}>
 						Enemigo{enemy.isUndead ? ' · No-muerto' : ''}
@@ -84,7 +85,7 @@ export function TargetInfoPanel({
 					</View>
 					<LifeBar
 						current={enemy.currentLife <= 0 ? 0 : enemy.currentLife}
-						max={Math.max(enemy.currentLife, 1)}
+						max={getEnemyMaxLife(enemy)}
 						isEnemy
 					/>
 					{targetAutoSelected && (
@@ -102,10 +103,15 @@ export function TargetInfoPanel({
 								style={styles.name}
 								numberOfLines={2}
 							>
-								{hero.name}
+								{{
+									warrior: 'Guerrero',
+									rogue: 'Pícaro',
+									cleric: 'Clérigo',
+									wizard: 'Mago',
+								}[hero.class] ?? hero.class}
 							</Text>
 							<Text style={styles.kind}>
-								{hero.class} · {statusLabel(getHeroStatus(hero))}
+								{statusLabel(getHeroStatus(hero))} · Niv. {hero.level}
 							</Text>
 						</View>
 					</View>

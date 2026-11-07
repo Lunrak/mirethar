@@ -97,6 +97,7 @@ export function generateEncounter(
     name: template.name,
     level: template.level,
     currentLife: template.life,
+    maxLife: template.life,
     attacks: template.attacks,
     isUndead: template.isUndead,
   }));

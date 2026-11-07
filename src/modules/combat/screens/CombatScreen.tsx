@@ -19,8 +19,8 @@ import { TargetInfoPanel } from '../components/TargetInfoPanel';
 import type { Action } from '../../../core/types/combat';
 
 const BASE_ACTIONS: Action[] = [
+	// La defensa es automática al ser atacado (4AD); no es acción de turno
 	{ type: 'attack', name: 'Attack', requiresTarget: true },
-	{ type: 'defend', name: 'Defend', requiresTarget: false },
 ];
 
 /** Zoom total ~1.05 s alineado con CombatFeedback */
@@ -280,7 +280,10 @@ export default function CombatScreen({
 				/>
 			</View>
 
-			<View style={styles.logSlot}>
+			<View
+				style={styles.logSlot}
+				pointerEvents="box-none"
+			>
 				<CombatLog entries={state.log} />
 			</View>
 
@@ -329,5 +332,12 @@ const styles = StyleSheet.create({
 	body: { flex: 1, flexDirection: 'row', minHeight: 0 },
 	cameraClip: { flex: 1, overflow: 'hidden', position: 'relative' },
 	cameraStage: { flex: 1 },
-	logSlot: { height: 120, paddingRight: 110 },
+	logSlot: {
+		position: 'absolute',
+		left: 0,
+		right: 0,
+		bottom: 0,
+		paddingRight: 110,
+		zIndex: 25,
+	},
 });

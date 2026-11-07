@@ -25,6 +25,8 @@ export type EnemyInstance = {
 	id: string;
 	templateId: string;
 	currentLife: number;
+	/** Life máxima del perfil (para barra de vida). Si falta, se infiere del template. */
+	maxLife?: number;
 	name: string;
 	level: number;
 	attacks: number;

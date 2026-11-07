@@ -247,6 +247,7 @@ export function tryMummyConversion(
     name: fallen ? `Mummy (${fallen.name})` : 'Mummy',
     level: 5,
     currentLife: 4,
+    maxLife: 4,
     attacks: 2,
     isUndead: true,
   };

@@ -150,9 +150,9 @@ describe('TurnManager – enemy turn', () => {
   });
 
   it('derrota cuando todos los héroes caen', () => {
-    // Party frágil sin mods de defensa: solo wizards sin equipo
+    // Party frágil: ids únicos (createHero en bucle rápido podía repetir Date.now)
     const weakParty = [0, 1, 2, 3].map((i) => {
-      const h = createHero('wizard', { name: `W${i}` });
+      const h = createHero('wizard', { name: `W${i}`, id: `wiz_weak_${i}` });
       return { ...h, equipment: {}, life: 1, maxLife: 1 };
     });
     const enemies: EnemyInstance[] = Array.from({ length: 2 }, (_, i) => ({
