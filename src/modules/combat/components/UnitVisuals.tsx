@@ -1,13 +1,14 @@
 /**
- * Representación visual básica de unidades – Día 19
+ * Representación visual básica de unidades – Día 19 + sprites
  * - Silueta / iconos de equipo del héroe
+ * - Sprites de héroes y monstruos (idle / attack / defend)
  * - Badges de estado (caído, herido, envenenado…)
  * - Barra de life con color por umbral
  * - Marcador de objetivo primario
  */
 
 import React from 'react';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, Image } from 'react-native';
 import type {
 	Hero,
 	EnemyInstance,
@@ -18,6 +19,12 @@ import {
 	getHeroStatus,
 	type HeroStatusKind,
 } from '../../../core/rules/HeroStatus';
+import {
+	type SpritePose,
+	getEnemySprite,
+	getHeroSprite,
+	resolvePose,
+} from '../spriteMap';
 
 // ---------------------------------------------------------------------------
 // Iconos de equipo (MVP: emoji / glifo por tipo de ítem)
@@ -343,6 +350,146 @@ export function statusLabel(kind: HeroStatusKind): string {
 			return 'vivo';
 	}
 }
+
+// ---------------------------------------------------------------------------
+// Sprites (idle / attack / defend) – hoja de fantasía oscura
+// ---------------------------------------------------------------------------
+//
+// Nota técnica RN/Expo:
+// Los require() deben ser estáticos. Si el bundler no resuelve rutas dinámicas,
+// rellena el mapa SPRITE_REQUIRE abajo o mueve los PNG a assets/ y usa
+// require con rutas literales. Mientras tanto se muestra el emoji de respaldo.
+
+const SPRITE_SIZE = 56;
+const SPRITE_SIZE_FOCUS = 68;
+
+type UnitSpriteProps = {
+	pose: SpritePose;
+	size?: number;
+	/** Si no hay sprite, se muestra este emoji */
+	fallback: string;
+	/** Ruta relativa al PNG (solo informativa / para debug) */
+	debugPath?: string;
+};
+
+/**
+ * Componente base de sprite.
+ * Por ahora usa el emoji de respaldo + un contenedor listo para Image.
+ * Cuando tengas los require() estáticos, descomenta el <Image>.
+ */
+export function UnitSprite({
+	pose,
+	size = SPRITE_SIZE,
+	fallback,
+}: UnitSpriteProps) {
+	// Placeholder visual: el emoji + borde que cambia de color según pose
+	const borderColor =
+		pose === 'attack' ? '#c44' : pose === 'defend' ? '#4a8' : '#3a3a45';
+
+	return (
+		<View
+			style={[
+				spriteStyles.wrap,
+				{
+					width: size,
+					height: size,
+					borderColor,
+					borderWidth: pose === 'idle' ? 1 : 2,
+				},
+			]}
+		>
+			{/* 
+        Cuando configures require estáticos, sustituye el Text por:
+        <Image source={require('...')} style={{ width: size, height: size }} resizeMode="contain" />
+      */}
+			<Text style={[spriteStyles.fallback, { fontSize: size * 0.55 }]}>
+				{fallback}
+			</Text>
+			{pose !== 'idle' && (
+				<View style={spriteStyles.poseBadge}>
+					<Text style={spriteStyles.poseText}>
+						{pose === 'attack' ? '⚔' : '🛡'}
+					</Text>
+				</View>
+			)}
+		</View>
+	);
+}
+
+/** Sprite de héroe según clase + pose del zoom */
+export function HeroSprite({
+	hero,
+	pose,
+	focused = false,
+}: {
+	hero: Hero;
+	pose: SpritePose;
+	focused?: boolean;
+}) {
+	const ref = getHeroSprite(hero.class);
+	const size = focused ? SPRITE_SIZE_FOCUS : SPRITE_SIZE;
+	const fallback = CLASS_BASE[hero.class] ?? '👤';
+
+	return (
+		<UnitSprite
+			pose={pose}
+			size={size}
+			fallback={fallback}
+			debugPath={ref ? `${ref.folder}/${ref.key}_${pose}.png` : undefined}
+		/>
+	);
+}
+
+/** Sprite de enemigo según templateId + pose del zoom */
+export function EnemySprite({
+	enemy,
+	pose,
+	focused = false,
+}: {
+	enemy: EnemyInstance;
+	pose: SpritePose;
+	focused?: boolean;
+}) {
+	const ref = getEnemySprite(enemy.templateId);
+	const size = focused ? SPRITE_SIZE_FOCUS : SPRITE_SIZE;
+	const fallback = enemy.isUndead ? '💀' : '👹';
+
+	return (
+		<UnitSprite
+			pose={pose}
+			size={size}
+			fallback={fallback}
+			debugPath={ref ? `${ref.folder}/${ref.key}_${pose}.png` : undefined}
+		/>
+	);
+}
+
+export { resolvePose, type SpritePose };
+
+const spriteStyles = StyleSheet.create({
+	wrap: {
+		borderRadius: 8,
+		backgroundColor: '#1a1a22',
+		alignItems: 'center',
+		justifyContent: 'center',
+		overflow: 'hidden',
+	},
+	fallback: {
+		textAlign: 'center',
+	},
+	poseBadge: {
+		position: 'absolute',
+		right: 1,
+		bottom: 1,
+		backgroundColor: 'rgba(0,0,0,0.65)',
+		borderRadius: 4,
+		paddingHorizontal: 2,
+	},
+	poseText: {
+		fontSize: 10,
+		color: '#eee',
+	},
+});
 
 // silence unused import lint for Item if any
 export type { Item, StatusEffect };

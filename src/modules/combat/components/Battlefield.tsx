@@ -16,6 +16,9 @@ import {
 	StatusBadges,
 	PrimaryTargetMarker,
 	statusLabel,
+	HeroSprite,
+	EnemySprite,
+	resolvePose,
 } from './UnitVisuals';
 
 type Props = {
@@ -184,6 +187,8 @@ export function Battlefield({
 							impactKey != null &&
 							(h.id === impactTargetId || h.id === impactActorId);
 						const st = getHeroStatus(h);
+						const pose = resolvePose(h.id, impactActorId, impactTargetId);
+						const focused = !!hit;
 
 						return (
 							<UnitCardShell
@@ -211,7 +216,11 @@ export function Battlefield({
 									accessibilityLabel={`${h.name}, ${h.class}, ${statusLabel(st)}, ${h.life} de ${h.maxLife}`}
 								>
 									<View style={styles.heroTop}>
-										<HeroGearIcons hero={h} />
+										<HeroSprite
+											hero={h}
+											pose={pose}
+											focused={focused}
+										/>
 										<View style={styles.heroText}>
 											<Text
 												style={styles.name}
@@ -222,6 +231,11 @@ export function Battlefield({
 											<Text style={styles.meta}>
 												{h.class}
 												{active ? ' · turno' : ''}
+												{pose === 'attack'
+													? ' · ataca'
+													: pose === 'defend'
+														? ' · defiende'
+														: ''}
 											</Text>
 										</View>
 									</View>
@@ -253,6 +267,8 @@ export function Battlefield({
 							impactKey != null &&
 							(e.id === impactTargetId || e.id === impactActorId);
 						const maxLife = getEnemyMaxLife(e);
+						const pose = resolvePose(e.id, impactActorId, impactTargetId);
+						const focused = !!hit;
 
 						return (
 							<UnitCardShell
@@ -279,9 +295,11 @@ export function Battlefield({
 									accessibilityLabel={`${e.name}, level ${e.level}, life ${e.currentLife} de ${maxLife}`}
 								>
 									<View style={styles.enemyTop}>
-										<Text style={styles.enemyIcon}>
-											{e.isUndead ? '💀' : '👹'}
-										</Text>
+										<EnemySprite
+											enemy={e}
+											pose={pose}
+											focused={focused}
+										/>
 										<View style={{ flex: 1 }}>
 											<Text
 												style={styles.name}
@@ -291,6 +309,11 @@ export function Battlefield({
 											</Text>
 											<Text style={styles.meta}>
 												L{e.level} · Atk {e.attacks}
+												{pose === 'attack'
+													? ' · ataca'
+													: pose === 'defend'
+														? ' · defiende'
+														: ''}
 											</Text>
 										</View>
 									</View>
