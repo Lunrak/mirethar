@@ -4,7 +4,7 @@
  */
 
 import React, { useEffect, useRef, useMemo } from 'react';
-import { View, Text, StyleSheet, Animated, Easing } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import {
 	useCombatSession,
 	type CombatSession,
@@ -23,11 +23,7 @@ const BASE_ACTIONS: Action[] = [
 	{ type: 'attack', name: 'Attack', requiresTarget: true },
 ];
 
-/** Zoom total ~1.05 s alineado con CombatFeedback */
-const ZOOM_IN_MS = 220;
-const ZOOM_HOLD_MS = 480;
-const ZOOM_OUT_MS = 350;
-/** Auto-ack tras feedback completo (feedback ~1.05s + margen) */
+/** Auto-ack tras feedback / zoom de unidades (~1.05s + margen) */
 const RESULT_AUTO_ACK_MS = 1300;
 
 type Props = {
@@ -71,10 +67,6 @@ export default function CombatScreen({
 		(h) => h.id === state.selectedTargetId,
 	);
 
-	const camScale = useRef(new Animated.Value(1)).current;
-	const camTx = useRef(new Animated.Value(0)).current;
-	const camTy = useRef(new Animated.Value(0)).current;
-
 	const actions = useMemo(() => {
 		const list = [...BASE_ACTIONS];
 		if (currentHero?.class === 'cleric') {
@@ -91,79 +83,10 @@ export default function CombatScreen({
 		return list;
 	}, [currentHero?.class]);
 
-	const runCameraZoom = (actorId: string | null, targetId: string | null) => {
-		const isEnemyTarget =
-			!!targetId && state.enemies.some((e) => e.id === targetId);
-		const isHeroTarget =
-			!!targetId && state.heroes.some((h) => h.id === targetId);
-
-		let toTx = 0;
-		let toTy = -8;
-		let toScale = 1.18;
-
-		if (isEnemyTarget) {
-			toTx = -28;
-			toScale = 1.22;
-		} else if (isHeroTarget) {
-			toTx = 28;
-			toScale = 1.2;
-		} else if (actorId) {
-			toTx = 18;
-			toScale = 1.12;
-		}
-
-		camScale.setValue(1);
-		camTx.setValue(0);
-		camTy.setValue(0);
-
-		Animated.sequence([
-			Animated.parallel([
-				Animated.timing(camScale, {
-					toValue: toScale,
-					duration: ZOOM_IN_MS,
-					easing: Easing.out(Easing.cubic),
-					useNativeDriver: true,
-				}),
-				Animated.timing(camTx, {
-					toValue: toTx,
-					duration: ZOOM_IN_MS,
-					easing: Easing.out(Easing.cubic),
-					useNativeDriver: true,
-				}),
-				Animated.timing(camTy, {
-					toValue: toTy,
-					duration: ZOOM_IN_MS,
-					easing: Easing.out(Easing.cubic),
-					useNativeDriver: true,
-				}),
-			]),
-			Animated.delay(ZOOM_HOLD_MS),
-			Animated.parallel([
-				Animated.timing(camScale, {
-					toValue: 1,
-					duration: ZOOM_OUT_MS,
-					easing: Easing.inOut(Easing.cubic),
-					useNativeDriver: true,
-				}),
-				Animated.timing(camTx, {
-					toValue: 0,
-					duration: ZOOM_OUT_MS,
-					easing: Easing.inOut(Easing.cubic),
-					useNativeDriver: true,
-				}),
-				Animated.timing(camTy, {
-					toValue: 0,
-					duration: ZOOM_OUT_MS,
-					easing: Easing.inOut(Easing.cubic),
-					useNativeDriver: true,
-				}),
-			]),
-		]).start();
-	};
-
+	// Zoom solo en actor + objetivo(s) vía Battlefield (impactActorId / impactTargetId).
+	// Ya no se escala ni desplaza todo el campo de batalla.
 	useEffect(() => {
 		if (diceUi === 'result') {
-			runCameraZoom(focusActorId, focusTargetId);
 			spinTimeout.current = setTimeout(
 				() => acknowledgeResult(),
 				RESULT_AUTO_ACK_MS,
@@ -240,18 +163,7 @@ export default function CombatScreen({
 				/>
 
 				<View style={styles.cameraClip}>
-					<Animated.View
-						style={[
-							styles.cameraStage,
-							{
-								transform: [
-									{ translateX: camTx },
-									{ translateY: camTy },
-									{ scale: camScale },
-								],
-							},
-						]}
-					>
+					<View style={styles.cameraStage}>
 						<Battlefield
 							heroes={state.heroes}
 							enemies={state.enemies}
@@ -266,7 +178,7 @@ export default function CombatScreen({
 							onSelectEnemy={selectEnemyTarget}
 							onSelectHero={onSelectHeroTarget}
 						/>
-					</Animated.View>
+					</View>
 
 					<CombatFeedback feedback={lastFeedback} />
 				</View>
