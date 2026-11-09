@@ -25,6 +25,7 @@ import {
 	getHeroSprite,
 	resolvePose,
 } from '../spriteMap';
+import { getSpriteSource } from '../spriteAssets';
 
 // ---------------------------------------------------------------------------
 // Iconos de equipo (MVP: emoji / glifo por tipo de ítem)
@@ -354,11 +355,7 @@ export function statusLabel(kind: HeroStatusKind): string {
 // ---------------------------------------------------------------------------
 // Sprites (idle / attack / defend) – hoja de fantasía oscura
 // ---------------------------------------------------------------------------
-//
-// Nota técnica RN/Expo:
-// Los require() deben ser estáticos. Si el bundler no resuelve rutas dinámicas,
-// rellena el mapa SPRITE_REQUIRE abajo o mueve los PNG a assets/ y usa
-// require con rutas literales. Mientras tanto se muestra el emoji de respaldo.
+// Fuentes: src/assets/sprites/ via require() estáticos en spriteAssets.ts
 
 const SPRITE_SIZE = 56;
 const SPRITE_SIZE_FOCUS = 68;
@@ -366,25 +363,26 @@ const SPRITE_SIZE_FOCUS = 68;
 type UnitSpriteProps = {
 	pose: SpritePose;
 	size?: number;
-	/** Si no hay sprite, se muestra este emoji */
+	/** Emoji si no hay PNG o falla la carga */
 	fallback: string;
-	/** Ruta relativa al PNG (solo informativa / para debug) */
-	debugPath?: string;
+	/** Carpeta + key del mapa (ver spriteMap / spriteAssets) */
+	folder?: 'vermin' | 'minions' | 'bosses' | 'weird' | 'heroes';
+	spriteKey?: string;
 };
 
-/**
- * Componente base de sprite.
- * Por ahora usa el emoji de respaldo + un contenedor listo para Image.
- * Cuando tengas los require() estáticos, descomenta el <Image>.
- */
+/** Componente base: muestra el PNG real según pose, o emoji de respaldo */
 export function UnitSprite({
 	pose,
 	size = SPRITE_SIZE,
 	fallback,
+	folder,
+	spriteKey,
 }: UnitSpriteProps) {
-	// Placeholder visual: el emoji + borde que cambia de color según pose
 	const borderColor =
 		pose === 'attack' ? '#c44' : pose === 'defend' ? '#4a8' : '#3a3a45';
+
+	const source =
+		folder && spriteKey ? getSpriteSource(folder, spriteKey, pose) : null;
 
 	return (
 		<View
@@ -398,15 +396,23 @@ export function UnitSprite({
 				},
 			]}
 		>
-			{/* 
-        Cuando configures require estáticos, sustituye el Text por:
-        <Image source={require('...')} style={{ width: size, height: size }} resizeMode="contain" />
-      */}
-			<Text style={[spriteStyles.fallback, { fontSize: size * 0.55 }]}>
-				{fallback}
-			</Text>
+			{source ? (
+				<Image
+					source={source}
+					style={{ width: size - 4, height: size - 4 }}
+					resizeMode="contain"
+					accessibilityLabel={`sprite ${spriteKey} ${pose}`}
+				/>
+			) : (
+				<Text style={[spriteStyles.fallback, { fontSize: size * 0.55 }]}>
+					{fallback}
+				</Text>
+			)}
 			{pose !== 'idle' && (
-				<View style={spriteStyles.poseBadge}>
+				<View
+					style={spriteStyles.poseBadge}
+					pointerEvents="none"
+				>
 					<Text style={spriteStyles.poseText}>
 						{pose === 'attack' ? '⚔' : '🛡'}
 					</Text>
@@ -435,7 +441,8 @@ export function HeroSprite({
 			pose={pose}
 			size={size}
 			fallback={fallback}
-			debugPath={ref ? `${ref.folder}/${ref.key}_${pose}.png` : undefined}
+			folder={ref?.folder}
+			spriteKey={ref?.key}
 		/>
 	);
 }
@@ -459,7 +466,8 @@ export function EnemySprite({
 			pose={pose}
 			size={size}
 			fallback={fallback}
-			debugPath={ref ? `${ref.folder}/${ref.key}_${pose}.png` : undefined}
+			folder={ref?.folder}
+			spriteKey={ref?.key}
 		/>
 	);
 }

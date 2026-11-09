@@ -27,6 +27,7 @@ export {
   getEnemySprite,
   getHeroSprite,
 } from './spriteMap';
+export { getSpriteSource, SPRITE_SOURCES } from './spriteAssets';
 export { useCombatSession } from './hooks/useCombatSession';
 export type {
   DiceUiState,
