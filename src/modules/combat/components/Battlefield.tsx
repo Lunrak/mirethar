@@ -9,7 +9,10 @@ import React, { useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, Pressable, Animated } from 'react-native';
 import type { Hero, EnemyInstance, Action } from '../../../core/types/combat';
 import { getHeroStatus } from '../../../core/rules/HeroStatus';
-import { getEnemyMaxLife } from '../../../core/data/enemyLookup';
+import {
+	getEnemyMaxLife,
+	getEnemyTemplate,
+} from '../../../core/data/enemyLookup';
 import {
 	HeroGearIcons,
 	LifeBar,
@@ -39,6 +42,30 @@ type Props = {
 	/** Cambia en cada resolución para reiniciar animación */
 	impactKey?: string | null;
 };
+
+/** Etiqueta legible del tipo 4AD (vermin / minion / boss / weird) */
+function enemyTypeLabel(type: string): string {
+	switch (type) {
+		case 'vermin':
+			return 'Vermin';
+		case 'minion':
+			return 'Minion';
+		case 'boss':
+			return 'Boss';
+		case 'weird':
+			return 'Weird';
+		default:
+			return type || 'Enemigo';
+	}
+}
+
+function inferTypeFromId(templateId: string): string {
+	if (templateId.startsWith('vermin_')) return 'vermin';
+	if (templateId.startsWith('minion_')) return 'minion';
+	if (templateId.startsWith('boss_')) return 'boss';
+	if (templateId.startsWith('weird_')) return 'weird';
+	return 'enemigo';
+}
 
 function useImpactAnim(active: boolean, key: string | null | undefined) {
 	const scale = useRef(new Animated.Value(1)).current;
@@ -267,8 +294,19 @@ export function Battlefield({
 							impactKey != null &&
 							(e.id === impactTargetId || e.id === impactActorId);
 						const maxLife = getEnemyMaxLife(e);
+						const showLifeBar = maxLife > 1;
 						const pose = resolvePose(e.id, impactActorId, impactTargetId);
 						const focused = !!hit;
+						const template = getEnemyTemplate(e.templateId);
+						const typeLabel = enemyTypeLabel(
+							template?.type ?? inferTypeFromId(e.templateId),
+						);
+						const poseHint =
+							pose === 'attack'
+								? ' · ataca'
+								: pose === 'defend'
+									? ' · defiende'
+									: '';
 
 						return (
 							<UnitCardShell
@@ -292,7 +330,11 @@ export function Battlefield({
 										pressed && selectable && styles.cardPressed,
 									]}
 									accessibilityRole="button"
-									accessibilityLabel={`${e.name}, level ${e.level}, life ${e.currentLife} de ${maxLife}`}
+									accessibilityLabel={
+										showLifeBar
+											? `${e.name}, ${typeLabel}, level ${e.level}, life ${e.currentLife} de ${maxLife}`
+											: `${e.name}, ${typeLabel}, level ${e.level}`
+									}
 								>
 									<View style={styles.enemyTop}>
 										<EnemySprite
@@ -308,21 +350,20 @@ export function Battlefield({
 												{e.name}
 											</Text>
 											<Text style={styles.meta}>
-												L{e.level} · Atk {e.attacks}
-												{pose === 'attack'
-													? ' · ataca'
-													: pose === 'defend'
-														? ' · defiende'
-														: ''}
+												{showLifeBar
+													? `L${e.level} · Atk ${e.attacks}${poseHint}`
+													: `${typeLabel} · L${e.level}${poseHint}`}
 											</Text>
 										</View>
 									</View>
 									<StatusBadges enemy={e} />
-									<LifeBar
-										current={dead ? 0 : e.currentLife}
-										max={maxLife}
-										isEnemy
-									/>
+									{showLifeBar && (
+										<LifeBar
+											current={dead ? 0 : e.currentLife}
+											max={maxLife}
+											isEnemy
+										/>
+									)}
 								</Pressable>
 							</UnitCardShell>
 						);
