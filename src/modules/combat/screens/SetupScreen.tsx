@@ -1,8 +1,6 @@
 /**
- * Setup del Core Loop – GDD §2
- * 1. Party por defecto (4 clases)
- * 2. Tipo de encuentro
- * 3. Disposición frente / retaguardia
+ * SetupScreen – preparación del encuentro (Core Loop GDD §2)
+ * Tipo de encuentro + orden de marcha + hoja de personaje
  */
 
 import React, { useMemo, useState } from 'react';
@@ -11,29 +9,40 @@ import { createDefaultParty } from '../../../core/data/classes';
 import type { Hero } from '../../../core/types/combat';
 import type { EncounterType } from '../../../core/rules/EncounterGenerator';
 import { HeroGearIcons } from '../components/UnitVisuals';
-
-export type SetupResult = {
-	heroes: Hero[];
-	encounterType: EncounterType;
-	positions: { front: string[]; rear: string[] };
-};
+import { CharacterSheet } from '../components/CharacterSheet';
 
 type Props = {
-	onStart: (setup: SetupResult) => void;
+	onStart: (config: {
+		heroes: Hero[];
+		encounterType: EncounterType;
+		positions: { front: string[]; rear: string[] };
+	}) => void;
 };
 
 const ENCOUNTER_OPTS: { id: EncounterType; label: string; hint: string }[] = [
-	{ id: 'vermin', label: 'Vermin', hint: 'Enjambre débil, sin XP' },
-	{ id: 'minion', label: 'Minions', hint: 'Grupo típico · trolls regeneran' },
+	{ id: 'vermin', label: 'Vermin', hint: 'Plagas · cantidades altas' },
+	{ id: 'minion', label: 'Minion', hint: 'Grupo típico · trolls regeneran' },
 	{ id: 'boss', label: 'Boss', hint: 'Jefe · 1 tirada XP' },
 	{ id: 'weird', label: 'Weird', hint: 'Monstruo raro · 1 tirada XP' },
 ];
 
 export default function SetupScreen({ onStart }: Props) {
-	const [heroes] = useState<Hero[]>(() => createDefaultParty());
+	const [heroes, setHeroes] = useState<Hero[]>(() => createDefaultParty());
 	const [encounterType, setEncounterType] = useState<EncounterType>('minion');
-	/** Orden de marcha: índice 0–1 frente, 2–3 retaguardia por defecto */
-	const [order, setOrder] = useState<string[]>(() => heroes.map((h) => h.id));
+	const [order, setOrder] = useState<string[]>([]);
+	const [sheetHeroId, setSheetHeroId] = useState<string | null>(null);
+
+	React.useEffect(() => {
+		setOrder((prev) => {
+			if (
+				prev.length === heroes.length &&
+				prev.every((id) => heroes.some((h) => h.id === id))
+			) {
+				return prev;
+			}
+			return heroes.map((h) => h.id);
+		});
+	}, [heroes]);
 
 	const front = order.slice(0, 2);
 	const rear = order.slice(2, 4);
@@ -42,6 +51,8 @@ export default function SetupScreen({ onStart }: Props) {
 		const m = new Map(heroes.map((h) => [h.id, h]));
 		return m;
 	}, [heroes]);
+
+	const sheetHero = sheetHeroId ? (byId.get(sheetHeroId) ?? null) : null;
 
 	const move = (id: string, dir: -1 | 1) => {
 		setOrder((prev) => {
@@ -52,6 +63,10 @@ export default function SetupScreen({ onStart }: Props) {
 			[next[i], next[j]] = [next[j], next[i]];
 			return next;
 		});
+	};
+
+	const updateHero = (updated: Hero) => {
+		setHeroes((prev) => prev.map((h) => (h.id === updated.id ? updated : h)));
 	};
 
 	const start = () => {
@@ -75,7 +90,12 @@ export default function SetupScreen({ onStart }: Props) {
 				key={id}
 				style={styles.heroCard}
 			>
-				<View style={styles.heroMain}>
+				<Pressable
+					style={styles.heroMain}
+					onPress={() => setSheetHeroId(id)}
+					accessibilityRole="button"
+					accessibilityLabel={`Abrir hoja de ${h.name}`}
+				>
 					<HeroGearIcons hero={h} />
 					<View style={{ flex: 1 }}>
 						<Text style={styles.heroName}>{h.name}</Text>
@@ -85,8 +105,9 @@ export default function SetupScreen({ onStart }: Props) {
 						<Text style={styles.zoneTag}>
 							{zone === 'front' ? 'Frente' : 'Retaguardia'} · #{indexInZone + 1}
 						</Text>
+						<Text style={styles.openSheet}>Toca para hoja de personaje</Text>
 					</View>
-				</View>
+				</Pressable>
 				<View style={styles.moveRow}>
 					<Pressable
 						onPress={() => move(id, -1)}
@@ -114,7 +135,9 @@ export default function SetupScreen({ onStart }: Props) {
 		<View style={styles.root}>
 			<View style={styles.header}>
 				<Text style={styles.title}>Preparar encuentro</Text>
-				<Text style={styles.sub}>Core Loop · GDD §2</Text>
+				<Text style={styles.sub}>
+					Core Loop · GDD §2 · toca un héroe para su hoja
+				</Text>
 			</View>
 
 			<ScrollView
@@ -122,7 +145,6 @@ export default function SetupScreen({ onStart }: Props) {
 				horizontal={false}
 			>
 				<View style={styles.row}>
-					{/* Encuentro */}
 					<View style={styles.col}>
 						<Text style={styles.section}>Tipo de encuentro</Text>
 						{ENCOUNTER_OPTS.map((opt) => {
@@ -144,11 +166,10 @@ export default function SetupScreen({ onStart }: Props) {
 						})}
 					</View>
 
-					{/* Formación */}
 					<View style={[styles.col, { flex: 1.4 }]}>
 						<Text style={styles.section}>Orden de marcha</Text>
 						<Text style={styles.hint}>
-							Los dos primeros van al frente (reciben ataques primero).
+							Los dos primeros van al frente. Toca un héroe para abrir su hoja.
 						</Text>
 						<Text style={styles.zoneTitle}>Frente</Text>
 						{front.map((id, i) => renderSlot(id, 'front', i))}
@@ -168,6 +189,15 @@ export default function SetupScreen({ onStart }: Props) {
 					<Text style={styles.startText}>Generar encuentro y combatir</Text>
 				</Pressable>
 			</View>
+
+			{sheetHero && (
+				<CharacterSheet
+					hero={sheetHero}
+					visible={!!sheetHero}
+					onClose={() => setSheetHeroId(null)}
+					onChange={updateHero}
+				/>
+			)}
 		</View>
 	);
 }
@@ -228,6 +258,12 @@ const styles = StyleSheet.create({
 	heroName: { color: '#e8e6e3', fontSize: 16, fontWeight: '700' },
 	heroMeta: { color: '#9a9690', fontSize: 13 },
 	zoneTag: { color: '#6b6760', fontSize: 12, marginTop: 2 },
+	openSheet: {
+		color: '#5dce7a',
+		fontSize: 12,
+		marginTop: 3,
+		fontWeight: '600',
+	},
 	moveRow: { gap: 4 },
 	moveBtn: {
 		width: 40,
