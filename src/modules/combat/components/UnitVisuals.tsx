@@ -126,6 +126,7 @@ const STATUS_BADGE: Record<
 	poisoned: { label: 'VENENO', color: '#9dce5d', bg: '#2a3a20' },
 	cursed: { label: 'MALDITO', color: '#c49bff', bg: '#2a2040' },
 	petrified: { label: 'PIEDRA', color: '#a0a0a8', bg: '#303038' },
+	fled: { label: 'HUYE', color: '#9a9690', bg: '#2a2a32' },
 	sleeping: { label: 'DORMIDO', color: '#6ea8fe', bg: '#1e2a3a' },
 	blessed: { label: 'BENDITO', color: '#f0d78c', bg: '#3a3420' },
 	protected: { label: 'PROTEGIDO', color: '#6ea8fe', bg: '#1e2a3a' },
@@ -162,7 +163,8 @@ export function StatusBadges({
 
 	if (hero) keys.push(...statusFromHero(hero));
 	if (enemy) {
-		if (enemy.currentLife <= 0) keys.push('dead');
+		if (enemy.fled) keys.push('fled');
+		else if (enemy.currentLife <= 0) keys.push('dead');
 		if (enemy.isUndead) {
 			/* badge aparte abajo */
 		}

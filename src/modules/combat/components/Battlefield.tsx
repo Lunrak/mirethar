@@ -162,6 +162,48 @@ function UnitCardShell({
 	);
 }
 
+/** Animación de huida: desliza hacia fuera y se desvanece */
+function FleeSlide({
+	active,
+	children,
+	style,
+}: {
+	active: boolean;
+	children: React.ReactNode;
+	style?: object;
+}) {
+	const tx = React.useRef(new Animated.Value(0)).current;
+	const op = React.useRef(new Animated.Value(1)).current;
+
+	React.useEffect(() => {
+		if (!active) {
+			tx.setValue(0);
+			op.setValue(1);
+			return;
+		}
+		Animated.parallel([
+			Animated.timing(tx, {
+				toValue: 140,
+				duration: 700,
+				useNativeDriver: true,
+			}),
+			Animated.timing(op, {
+				toValue: 0,
+				duration: 700,
+				useNativeDriver: true,
+			}),
+		]).start();
+	}, [active, tx, op]);
+
+	return (
+		<Animated.View
+			style={[style, { transform: [{ translateX: tx }], opacity: op }]}
+		>
+			{children}
+		</Animated.View>
+	);
+}
+
 export function Battlefield({
 	heroes,
 	enemies,
@@ -285,7 +327,8 @@ export function Battlefield({
 				<View style={styles.col}>
 					<Text style={styles.colTitle}>Enemigos</Text>
 					{enemies.map((e) => {
-						const dead = e.currentLife <= 0;
+						const fled = !!e.fled;
+						const dead = e.currentLife <= 0 || fled;
 						const selected = e.id === selectedTargetId;
 						const isPrimary =
 							selected && (targetingEnemy || targetAutoSelected);
@@ -310,63 +353,69 @@ export function Battlefield({
 									: '';
 
 						return (
-							<UnitCardShell
+							<FleeSlide
 								key={e.id}
-								activeImpact={!!hit}
-								impactKey={impactKey}
-								isPrimaryTarget={!!isPrimary}
-								style={[
-									styles.card,
-									styles.cardEnemy,
-									selected && styles.cardSelectedEnemy,
-									dead && styles.cardDown,
-									selectable && styles.cardSelectableEnemy,
-								]}
+								active={fled}
+								style={{ width: '100%' }}
 							>
-								<Pressable
-									disabled={!selectable}
-									onPress={() => onSelectEnemy(e.id)}
-									hitSlop={6}
-									style={({ pressed }) => [
-										pressed && selectable && styles.cardPressed,
+								<UnitCardShell
+									activeImpact={!!hit && !fled}
+									impactKey={impactKey}
+									isPrimaryTarget={!!isPrimary && !fled}
+									style={[
+										styles.card,
+										styles.cardEnemy,
+										selected && styles.cardSelectedEnemy,
+										dead && styles.cardDown,
+										selectable && styles.cardSelectableEnemy,
+										fled && styles.cardFled,
 									]}
-									accessibilityRole="button"
-									accessibilityLabel={
-										showLifeBar
-											? `${e.name}, ${typeLabel}, level ${e.level}, life ${e.currentLife} de ${maxLife}`
-											: `${e.name}, ${typeLabel}, level ${e.level}`
-									}
 								>
-									<View style={styles.enemyTop}>
-										<EnemySprite
-											enemy={e}
-											pose={pose}
-											focused={focused}
-										/>
-										<View style={{ flex: 1 }}>
-											<Text
-												style={styles.name}
-												numberOfLines={1}
-											>
-												{e.name}
-											</Text>
-											<Text style={styles.meta}>
-												{showLifeBar
-													? `L${e.level} · Atk ${e.attacks}${poseHint}`
-													: `${typeLabel} · L${e.level}${poseHint}`}
-											</Text>
+									<Pressable
+										disabled={!selectable}
+										onPress={() => onSelectEnemy(e.id)}
+										hitSlop={6}
+										style={({ pressed }) => [
+											pressed && selectable && styles.cardPressed,
+										]}
+										accessibilityRole="button"
+										accessibilityLabel={
+											showLifeBar
+												? `${e.name}, ${typeLabel}, level ${e.level}, life ${e.currentLife} de ${maxLife}`
+												: `${e.name}, ${typeLabel}, level ${e.level}`
+										}
+									>
+										<View style={styles.enemyTop}>
+											<EnemySprite
+												enemy={e}
+												pose={pose}
+												focused={focused}
+											/>
+											<View style={{ flex: 1 }}>
+												<Text
+													style={styles.name}
+													numberOfLines={1}
+												>
+													{e.name}
+												</Text>
+												<Text style={styles.meta}>
+													{showLifeBar
+														? `L${e.level} · Atk ${e.attacks}${poseHint}`
+														: `${typeLabel} · L${e.level}${poseHint}`}
+												</Text>
+											</View>
 										</View>
-									</View>
-									<StatusBadges enemy={e} />
-									{showLifeBar && (
-										<LifeBar
-											current={dead ? 0 : e.currentLife}
-											max={maxLife}
-											isEnemy
-										/>
-									)}
-								</Pressable>
-							</UnitCardShell>
+										<StatusBadges enemy={e} />
+										{showLifeBar && (
+											<LifeBar
+												current={dead ? 0 : e.currentLife}
+												max={maxLife}
+												isEnemy
+											/>
+										)}
+									</Pressable>
+								</UnitCardShell>
+							</FleeSlide>
 						);
 					})}
 				</View>
@@ -432,6 +481,7 @@ const styles = StyleSheet.create({
 	cardSelectableEnemy: { borderColor: '#6a4040' },
 	cardPressed: { transform: [{ scale: 0.97 }], opacity: 0.9 },
 	cardDown: { opacity: 0.4 },
+	cardFled: { opacity: 0.55, borderColor: '#5a5650' },
 	cardDead: { opacity: 0.3, borderColor: '#333' },
 	heroTop: { flexDirection: 'row', alignItems: 'center', gap: 8 },
 	heroText: { flex: 1, minWidth: 0 },

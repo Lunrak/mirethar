@@ -37,6 +37,8 @@ export type EnemyInstance = {
 	baseLevel?: number;
 	attacks: number;
 	isUndead?: boolean;
+	/** Huyó por moral (animación + fuera de combate) */
+	fled?: boolean;
 };
 
 export type CombatPosition = { front: string[]; rear: string[] };
@@ -99,6 +101,10 @@ export type CombatState = {
 	log: CombatLogEntry[];
 	isFinished: boolean;
 	result: 'victory' | 'defeat' | null;
+	/** templateIds que ya testearon moral este encuentro */
+	moraleTested?: string[];
+	/** cantidad inicial por templateId */
+	initialEnemyCounts?: Record<string, number>;
 	/** Orden de turno de héroes vivos (ids) */
 	heroTurnOrder: string[];
 	/** Índice del héroe actual dentro de heroTurnOrder */
