@@ -96,6 +96,7 @@ export function generateEncounter(
     templateId: template.id,
     name: template.name,
     level: template.level,
+    baseLevel: template.level,
     currentLife: template.life,
     maxLife: template.life,
     attacks: template.attacks,

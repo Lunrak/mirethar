@@ -7,7 +7,7 @@ import { DiceResult } from '../types/combat';
 
 /** Tira un d6 (1-6). */
 export function rollD6(rng: () => number = Math.random): number {
-	return Math.floor(rng() * 6) + 1;
+  return Math.floor(rng() * 6) + 1;
 }
 
 /**
@@ -16,42 +16,37 @@ export function rollD6(rng: () => number = Math.random): number {
  * Se tira un d6. Si sale 6 se vuelve a tirar y se suma.
  * Se continúa mientras salga 6. El total es la suma de todos los dados.
  */
-export function rollWithExplosiveSix(
-	rng: () => number = Math.random,
-): DiceResult {
-	const rolls: number[] = [];
-	let total = 0;
-	let current = rollD6(rng);
-	rolls.push(current);
-	total += current;
+export function rollWithExplosiveSix(rng: () => number = Math.random): DiceResult {
+  const rolls: number[] = [];
+  let total = 0;
+  let current = rollD6(rng);
+  rolls.push(current);
+  total += current;
 
-	const MAX_EXPLOSIONS = 20;
-	while (current === 6 && rolls.length <= MAX_EXPLOSIONS) {
-		current = rollD6(rng);
-		rolls.push(current);
-		total += current;
-	}
+  // Límite de seguridad para evitar bucles infinitos con RNG defectuoso en tests
+  const MAX_EXPLOSIONS = 20;
+  while (current === 6 && rolls.length <= MAX_EXPLOSIONS) {
+    current = rollD6(rng);
+    rolls.push(current);
+    total += current;
+  }
 
-	return {
-		raw: rolls[0],
-		explosive: rolls.slice(1),
-		total,
-		isExplosive: rolls.length > 1,
-	};
+  return {
+    raw: rolls[0],
+    explosive: rolls.slice(1),
+    total,
+    isExplosive: rolls.length > 1,
+  };
 }
 
 /**
  * Tira NdX (ej: 3d6 → rollDice(3, 6)).
  * Útil para cantidades de monstruos.
  */
-export function rollDice(
-	count: number,
-	sides: number,
-	rng: () => number = Math.random,
-): number {
-	let total = 0;
-	for (let i = 0; i < count; i++) {
-		total += Math.floor(rng() * sides) + 1;
-	}
-	return total;
+export function rollDice(count: number, sides: number, rng: () => number = Math.random): number {
+  let total = 0;
+  for (let i = 0; i < count; i++) {
+    total += Math.floor(rng() * sides) + 1;
+  }
+  return total;
 }

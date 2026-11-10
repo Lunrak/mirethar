@@ -77,31 +77,32 @@ function useImpactAnim(active: boolean, key: string | null | undefined) {
 			glow.setValue(0);
 			return;
 		}
+		// Zoom solo en actor / objetivo(s): in → hold → out (~1 s total)
 		scale.setValue(1);
 		glow.setValue(0);
 		const anim = Animated.sequence([
 			Animated.parallel([
 				Animated.timing(scale, {
-					toValue: 1.12,
-					duration: 100,
+					toValue: 1.22,
+					duration: 220,
 					useNativeDriver: true,
 				}),
 				Animated.timing(glow, {
 					toValue: 1,
-					duration: 100,
+					duration: 220,
 					useNativeDriver: true,
 				}),
 			]),
+			Animated.delay(480),
 			Animated.parallel([
-				Animated.spring(scale, {
+				Animated.timing(scale, {
 					toValue: 1,
-					friction: 4,
-					tension: 120,
+					duration: 350,
 					useNativeDriver: true,
 				}),
 				Animated.timing(glow, {
 					toValue: 0,
-					duration: 450,
+					duration: 350,
 					useNativeDriver: true,
 				}),
 			]),

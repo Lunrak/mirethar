@@ -29,6 +29,12 @@ export type EnemyInstance = {
 	maxLife?: number;
 	name: string;
 	level: number;
+	/**
+	 * Level original al empezar el combate.
+	 * Si falta, se asume igual a `level` (aún no bajó por half-life).
+	 * 4AD: al quedar por debajo de la mitad de life, level = baseLevel - 1.
+	 */
+	baseLevel?: number;
 	attacks: number;
 	isUndead?: boolean;
 };
