@@ -1,7 +1,8 @@
 /**
  * Mapa de sprites para combate – Four Against Darkness
  * Carpeta: src/assets/sprites/{vermin|minions|bosses|weird|heroes}/
- * Nombre: {key}_{idle|attack|defend}.png
+ * Nombre: {key}_{idle|attack|defend|dead}.png
+ * dead = muerto / huido (192×192)
  *
  * Pose:
  * - idle   → En espera
@@ -9,7 +10,7 @@
  * - defend → Recibiendo ataque (quien recibe el impacto)
  */
 
-export type SpritePose = 'idle' | 'attack' | 'defend';
+export type SpritePose = 'idle' | 'attack' | 'defend' | 'dead';
 
 export type SpriteRef = {
   folder: 'vermin' | 'minions' | 'bosses' | 'weird' | 'heroes';
@@ -64,7 +65,10 @@ export function resolvePose(
   unitId: string,
   impactActorId: string | null | undefined,
   impactTargetId: string | null | undefined,
+  /** Si la unidad está muerta o ha huido → pose dead */
+  isDown?: boolean,
 ): SpritePose {
+  if (isDown) return 'dead';
   if (impactActorId && unitId === impactActorId) return 'attack';
   if (impactTargetId && unitId === impactTargetId) return 'defend';
   return 'idle';

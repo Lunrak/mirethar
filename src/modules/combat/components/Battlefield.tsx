@@ -339,8 +339,8 @@ export function Battlefield({
 							(e.id === impactTargetId || e.id === impactActorId);
 						const maxLife = getEnemyMaxLife(e);
 						const showLifeBar = maxLife > 1;
-						const pose = resolvePose(e.id, impactActorId, impactTargetId);
-						const focused = !!hit;
+						const pose = resolvePose(e.id, impactActorId, impactTargetId, dead);
+						const focused = !!hit && !dead;
 						const template = getEnemyTemplate(e.templateId);
 						const typeLabel = enemyTypeLabel(
 							template?.type ?? inferTypeFromId(e.templateId),
@@ -368,7 +368,7 @@ export function Battlefield({
 										selected && styles.cardSelectedEnemy,
 										dead && styles.cardDown,
 										selectable && styles.cardSelectableEnemy,
-										fled && styles.cardFled,
+										fled && { opacity: 0.55, borderColor: '#5a5650' },
 									]}
 								>
 									<Pressable
@@ -481,7 +481,6 @@ const styles = StyleSheet.create({
 	cardSelectableEnemy: { borderColor: '#6a4040' },
 	cardPressed: { transform: [{ scale: 0.97 }], opacity: 0.9 },
 	cardDown: { opacity: 0.4 },
-	cardFled: { opacity: 0.55, borderColor: '#5a5650' },
 	cardDead: { opacity: 0.3, borderColor: '#333' },
 	heroTop: { flexDirection: 'row', alignItems: 'center', gap: 8 },
 	heroText: { flex: 1, minWidth: 0 },

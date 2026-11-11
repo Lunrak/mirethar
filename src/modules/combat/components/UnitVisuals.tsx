@@ -381,7 +381,13 @@ export function UnitSprite({
 	spriteKey,
 }: UnitSpriteProps) {
 	const borderColor =
-		pose === 'attack' ? '#c44' : pose === 'defend' ? '#4a8' : '#3a3a45';
+		pose === 'attack'
+			? '#c44'
+			: pose === 'defend'
+				? '#4a8'
+				: pose === 'dead'
+					? '#555'
+					: '#3a3a45';
 
 	const source =
 		folder && spriteKey ? getSpriteSource(folder, spriteKey, pose) : null;
@@ -416,7 +422,13 @@ export function UnitSprite({
 					pointerEvents="none"
 				>
 					<Text style={spriteStyles.poseText}>
-						{pose === 'attack' ? '⚔' : '🛡'}
+						{pose === 'attack'
+							? '⚔'
+							: pose === 'defend'
+								? '🛡'
+								: pose === 'dead'
+									? '☠'
+									: ''}
 					</Text>
 				</View>
 			)}
@@ -461,11 +473,13 @@ export function EnemySprite({
 }) {
 	const ref = getEnemySprite(enemy.templateId);
 	const size = focused ? SPRITE_SIZE_FOCUS : SPRITE_SIZE;
-	const fallback = enemy.isUndead ? '💀' : '👹';
+	const isDown = enemy.currentLife <= 0 || !!enemy.fled;
+	const effectivePose: SpritePose = isDown ? 'dead' : pose;
+	const fallback = isDown ? '💀' : enemy.isUndead ? '💀' : '👹';
 
 	return (
 		<UnitSprite
-			pose={pose}
+			pose={effectivePose}
 			size={size}
 			fallback={fallback}
 			folder={ref?.folder}
