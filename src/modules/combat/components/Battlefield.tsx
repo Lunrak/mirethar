@@ -328,19 +328,26 @@ export function Battlefield({
 					<Text style={styles.colTitle}>Enemigos</Text>
 					{enemies.map((e) => {
 						const fled = !!e.fled;
-						const dead = e.currentLife <= 0 || fled;
+						const killed = e.currentLife <= 0 && !fled;
+						const outOfFight = killed || fled;
 						const selected = e.id === selectedTargetId;
 						const isPrimary =
 							selected && (targetingEnemy || targetAutoSelected);
 						const selectable =
-							canTap && targetingEnemy && !dead && !targetAutoSelected;
+							canTap && targetingEnemy && !outOfFight && !targetAutoSelected;
 						const hit =
 							impactKey != null &&
 							(e.id === impactTargetId || e.id === impactActorId);
 						const maxLife = getEnemyMaxLife(e);
 						const showLifeBar = maxLife > 1;
-						const pose = resolvePose(e.id, impactActorId, impactTargetId, dead);
-						const focused = !!hit && !dead;
+						// Solo muertos usan pose dead (sprite); huida = texto "huyó"
+						const pose = resolvePose(
+							e.id,
+							impactActorId,
+							impactTargetId,
+							killed,
+						);
+						const focused = !!hit && !outOfFight;
 						const template = getEnemyTemplate(e.templateId);
 						const typeLabel = enemyTypeLabel(
 							template?.type ?? inferTypeFromId(e.templateId),
@@ -366,9 +373,9 @@ export function Battlefield({
 										styles.card,
 										styles.cardEnemy,
 										selected && styles.cardSelectedEnemy,
-										dead && styles.cardDown,
+										outOfFight && styles.cardDown,
 										selectable && styles.cardSelectableEnemy,
-										fled && { opacity: 0.55, borderColor: '#5a5650' },
+										fled && { opacity: 0.7, borderColor: '#5a5650' },
 									]}
 								>
 									<Pressable
@@ -386,11 +393,17 @@ export function Battlefield({
 										}
 									>
 										<View style={styles.enemyTop}>
-											<EnemySprite
-												enemy={e}
-												pose={pose}
-												focused={focused}
-											/>
+											{fled ? (
+												<View style={styles.fledBox}>
+													<Text style={styles.fledText}>huyó</Text>
+												</View>
+											) : (
+												<EnemySprite
+													enemy={e}
+													pose={pose}
+													focused={focused}
+												/>
+											)}
 											<View style={{ flex: 1 }}>
 												<Text
 													style={styles.name}
@@ -399,16 +412,18 @@ export function Battlefield({
 													{e.name}
 												</Text>
 												<Text style={styles.meta}>
-													{showLifeBar
-														? `L${e.level} · Atk ${e.attacks}${poseHint}`
-														: `${typeLabel} · L${e.level}${poseHint}`}
+													{fled
+														? 'Fuera de combate'
+														: showLifeBar
+															? `L${e.level} · Atk ${e.attacks}${poseHint}`
+															: `${typeLabel} · L${e.level}${poseHint}`}
 												</Text>
 											</View>
 										</View>
 										<StatusBadges enemy={e} />
-										{showLifeBar && (
+										{showLifeBar && !fled && (
 											<LifeBar
-												current={dead ? 0 : e.currentLife}
+												current={killed ? 0 : e.currentLife}
 												max={maxLife}
 												isEnemy
 											/>

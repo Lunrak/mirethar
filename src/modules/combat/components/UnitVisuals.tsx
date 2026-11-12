@@ -126,7 +126,7 @@ const STATUS_BADGE: Record<
 	poisoned: { label: 'VENENO', color: '#9dce5d', bg: '#2a3a20' },
 	cursed: { label: 'MALDITO', color: '#c49bff', bg: '#2a2040' },
 	petrified: { label: 'PIEDRA', color: '#a0a0a8', bg: '#303038' },
-	fled: { label: 'HUYE', color: '#9a9690', bg: '#2a2a32' },
+	fled: { label: 'HUYÓ', color: '#9a9690', bg: '#2a2a32' },
 	sleeping: { label: 'DORMIDO', color: '#6ea8fe', bg: '#1e2a3a' },
 	blessed: { label: 'BENDITO', color: '#f0d78c', bg: '#3a3420' },
 	protected: { label: 'PROTEGIDO', color: '#6ea8fe', bg: '#1e2a3a' },
@@ -359,8 +359,9 @@ export function statusLabel(kind: HeroStatusKind): string {
 // ---------------------------------------------------------------------------
 // Fuentes: src/assets/sprites/ via require() estáticos en spriteAssets.ts
 
-const SPRITE_SIZE = 56;
-const SPRITE_SIZE_FOCUS = 68;
+/** PNGs nativos 192×192; marco UI fijo, imagen centrada con contain */
+const SPRITE_SIZE = 64;
+const SPRITE_SIZE_FOCUS = 72;
 
 type UnitSpriteProps = {
 	pose: SpritePose;
@@ -407,7 +408,7 @@ export function UnitSprite({
 			{source ? (
 				<Image
 					source={source}
-					style={{ width: size - 4, height: size - 4 }}
+					style={spriteStyles.image}
 					resizeMode="contain"
 					accessibilityLabel={`sprite ${spriteKey} ${pose}`}
 				/>
@@ -473,9 +474,10 @@ export function EnemySprite({
 }) {
 	const ref = getEnemySprite(enemy.templateId);
 	const size = focused ? SPRITE_SIZE_FOCUS : SPRITE_SIZE;
-	const isDown = enemy.currentLife <= 0 || !!enemy.fled;
-	const effectivePose: SpritePose = isDown ? 'dead' : pose;
-	const fallback = isDown ? '💀' : enemy.isUndead ? '💀' : '👹';
+	// Solo muertos usan sprite _dead; la huida se muestra como texto en el campo
+	const killed = enemy.currentLife <= 0 && !enemy.fled;
+	const effectivePose: SpritePose = killed ? 'dead' : pose;
+	const fallback = killed ? '💀' : enemy.isUndead ? '💀' : '👹';
 
 	return (
 		<UnitSprite
@@ -492,11 +494,15 @@ export { resolvePose, type SpritePose };
 
 const spriteStyles = StyleSheet.create({
 	wrap: {
-		borderRadius: 8,
-		backgroundColor: '#1a1a22',
 		alignItems: 'center',
 		justifyContent: 'center',
+		borderRadius: 8,
+		backgroundColor: '#1a1a22',
 		overflow: 'hidden',
+	},
+	image: {
+		width: '100%',
+		height: '100%',
 	},
 	fallback: {
 		textAlign: 'center',
