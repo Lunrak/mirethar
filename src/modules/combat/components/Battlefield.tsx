@@ -509,4 +509,21 @@ const styles = StyleSheet.create({
 		fontWeight: '700',
 		marginHorizontal: 6,
 	},
+	fledBox: {
+		width: 64,
+		height: 64,
+		borderRadius: 8,
+		backgroundColor: '#1a1a22',
+		borderWidth: 1,
+		borderColor: '#5a5650',
+		alignItems: 'center',
+		justifyContent: 'center',
+	},
+	fledText: {
+		color: '#9a9690',
+		fontSize: 13,
+		fontWeight: '800',
+		textTransform: 'uppercase',
+		letterSpacing: 0.5,
+	},
 });
