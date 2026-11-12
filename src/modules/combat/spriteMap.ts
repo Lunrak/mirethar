@@ -52,13 +52,57 @@ export const ENEMY_SPRITE: Record<string, SpriteRef> = {
   weird_invisible_gremlins: { folder: 'weird', key: 'invisible_gremlins' },
 };
 
-/** clase → sprite (variante _m por defecto; cambia a _f si quieres género) */
+/**
+ * Convención de sprites de héroe (192×192):
+ * - {class}_f_{idle|attack|defend}  → sano (life === maxLife)
+ * - {class}_m_{idle|attack|defend}  → herido (0 < life < maxLife)
+ * - {class}_dead                    → caído / muerto (life <= 0)
+ * - {class}_stone                   → petrificado
+ */
 export const HERO_SPRITE: Record<string, SpriteRef> = {
-  warrior: { folder: 'heroes', key: 'warrior_m' },
-  rogue: { folder: 'heroes', key: 'rogue_m' },
-  cleric: { folder: 'heroes', key: 'cleric_m' },
-  wizard: { folder: 'heroes', key: 'wizard_m' },
+  warrior: { folder: 'heroes', key: 'warrior_f' },
+  rogue: { folder: 'heroes', key: 'rogue_f' },
+  cleric: { folder: 'heroes', key: 'cleric_f' },
+  wizard: { folder: 'heroes', key: 'wizard_f' },
 };
+
+export type HeroSpriteStatus = 'healthy' | 'wounded' | 'dead' | 'stone';
+
+/** Estado visual del héroe a partir de life / flags / status */
+export function getHeroSpriteStatus(hero: {
+  life: number;
+  maxLife: number;
+  isFallen?: boolean;
+  isDead?: boolean;
+  status?: { id: string }[];
+}): HeroSpriteStatus {
+  const statuses = hero.status ?? [];
+  if (statuses.some((s) => s.id === 'petrified' || s.id === 'stone')) {
+    return 'stone';
+  }
+  if (hero.isDead || hero.isFallen || hero.life <= 0) {
+    return 'dead';
+  }
+  if (hero.life < hero.maxLife) {
+    return 'wounded';
+  }
+  return 'healthy';
+}
+
+/**
+ * Clave de archivo bajo heroes/:
+ * - stone/dead → "cleric_stone" / "cleric_dead" (sin pose)
+ * - healthy/wounded → "cleric_f" / "cleric_m" (+ pose en getSpriteSource)
+ */
+export function getHeroSpriteKey(
+  heroClass: string,
+  status: HeroSpriteStatus,
+): { key: string; usePose: boolean } {
+  if (status === 'stone') return { key: `${heroClass}_stone`, usePose: false };
+  if (status === 'dead') return { key: `${heroClass}_dead`, usePose: false };
+  if (status === 'wounded') return { key: `${heroClass}_m`, usePose: true };
+  return { key: `${heroClass}_f`, usePose: true };
+}
 
 /** Calcula la pose según actor e impacto del zoom */
 export function resolvePose(
@@ -80,6 +124,15 @@ export function getEnemySprite(templateId: string): SpriteRef | null {
 
 export function getHeroSprite(heroClass: string): SpriteRef | null {
   return HERO_SPRITE[heroClass] ?? null;
+}
+
+/** Ref concreta según estado (para UI). */
+export function getHeroSpriteRef(
+  heroClass: string,
+  status: HeroSpriteStatus,
+): SpriteRef {
+  const { key } = getHeroSpriteKey(heroClass, status);
+  return { folder: 'heroes', key };
 }
 
 /** Ruta relativa desde el componente (ajusta si mueves la carpeta) */

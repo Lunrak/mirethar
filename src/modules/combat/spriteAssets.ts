@@ -1,7 +1,6 @@
 /**
  * require() estático de sprites – Metro no admite paths dinámicos.
- * Pose: idle | attack | defend | dead (enemigos)
- * dead: 192x192, nombre {key}_dead.png
+ * Héroes: {class}_f_* sano, {class}_m_* herido, {class}_dead, {class}_stone
  */
 
 import type { ImageSourcePropType } from 'react-native';
@@ -110,30 +109,38 @@ export const SPRITE_SOURCES: Record<string, ImageSourcePropType> = {
   'weird/minotaur_dead': require('../../assets/sprites/weird/minotaur_dead.png'),
   'weird/minotaur_defend': require('../../assets/sprites/weird/minotaur_defend.png'),
   'weird/minotaur_idle': require('../../assets/sprites/weird/minotaur_idle.png'),
+  'heroes/cleric_dead': require('../../assets/sprites/heroes/cleric_dead.png'),
   'heroes/cleric_f_attack': require('../../assets/sprites/heroes/cleric_f_attack.png'),
   'heroes/cleric_f_defend': require('../../assets/sprites/heroes/cleric_f_defend.png'),
   'heroes/cleric_f_idle': require('../../assets/sprites/heroes/cleric_f_idle.png'),
   'heroes/cleric_m_attack': require('../../assets/sprites/heroes/cleric_m_attack.png'),
   'heroes/cleric_m_defend': require('../../assets/sprites/heroes/cleric_m_defend.png'),
   'heroes/cleric_m_idle': require('../../assets/sprites/heroes/cleric_m_idle.png'),
+  'heroes/cleric_stone': require('../../assets/sprites/heroes/cleric_stone.png'),
+  'heroes/rogue_dead': require('../../assets/sprites/heroes/rogue_dead.png'),
   'heroes/rogue_f_attack': require('../../assets/sprites/heroes/rogue_f_attack.png'),
   'heroes/rogue_f_defend': require('../../assets/sprites/heroes/rogue_f_defend.png'),
   'heroes/rogue_f_idle': require('../../assets/sprites/heroes/rogue_f_idle.png'),
   'heroes/rogue_m_attack': require('../../assets/sprites/heroes/rogue_m_attack.png'),
   'heroes/rogue_m_defend': require('../../assets/sprites/heroes/rogue_m_defend.png'),
   'heroes/rogue_m_idle': require('../../assets/sprites/heroes/rogue_m_idle.png'),
+  'heroes/rogue_stone': require('../../assets/sprites/heroes/rogue_stone.png'),
+  'heroes/warrior_dead': require('../../assets/sprites/heroes/warrior_dead.png'),
   'heroes/warrior_f_attack': require('../../assets/sprites/heroes/warrior_f_attack.png'),
   'heroes/warrior_f_defend': require('../../assets/sprites/heroes/warrior_f_defend.png'),
   'heroes/warrior_f_idle': require('../../assets/sprites/heroes/warrior_f_idle.png'),
   'heroes/warrior_m_attack': require('../../assets/sprites/heroes/warrior_m_attack.png'),
   'heroes/warrior_m_defend': require('../../assets/sprites/heroes/warrior_m_defend.png'),
   'heroes/warrior_m_idle': require('../../assets/sprites/heroes/warrior_m_idle.png'),
+  'heroes/warrior_stone': require('../../assets/sprites/heroes/warrior_stone.png'),
+  'heroes/wizard_dead': require('../../assets/sprites/heroes/wizard_dead.png'),
   'heroes/wizard_f_attack': require('../../assets/sprites/heroes/wizard_f_attack.png'),
   'heroes/wizard_f_defend': require('../../assets/sprites/heroes/wizard_f_defend.png'),
   'heroes/wizard_f_idle': require('../../assets/sprites/heroes/wizard_f_idle.png'),
   'heroes/wizard_m_attack': require('../../assets/sprites/heroes/wizard_m_attack.png'),
   'heroes/wizard_m_defend': require('../../assets/sprites/heroes/wizard_m_defend.png'),
   'heroes/wizard_m_idle': require('../../assets/sprites/heroes/wizard_m_idle.png'),
+  'heroes/wizard_stone': require('../../assets/sprites/heroes/wizard_stone.png'),
 };
 
 export function getSpriteSource(
@@ -142,6 +149,11 @@ export function getSpriteSource(
   pose: SpritePose,
 ): ImageSourcePropType | null {
   const id = `${folder}/${key}_${pose}`;
+  return SPRITE_SOURCES[id] ?? null;
+}
+
+/** Lookup directo por id "folder/stem" (p. ej. heroes/cleric_dead). */
+export function getSpriteById(id: string): ImageSourcePropType | null {
   return SPRITE_SOURCES[id] ?? null;
 }
 

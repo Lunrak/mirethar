@@ -23,9 +23,11 @@ import {
 	type SpritePose,
 	getEnemySprite,
 	getHeroSprite,
+	getHeroSpriteStatus,
+	getHeroSpriteKey,
 	resolvePose,
 } from '../spriteMap';
-import { getSpriteSource } from '../spriteAssets';
+import { getSpriteSource, getSpriteById } from '../spriteAssets';
 
 // ---------------------------------------------------------------------------
 // Iconos de equipo (MVP: emoji / glifo por tipo de ítem)
@@ -371,6 +373,8 @@ type UnitSpriteProps = {
 	/** Carpeta + key del mapa (ver spriteMap / spriteAssets) */
 	folder?: 'vermin' | 'minions' | 'bosses' | 'weird' | 'heroes';
 	spriteKey?: string;
+	/** Id completo sin pose, p. ej. "heroes/cleric_dead" */
+	fixedAssetId?: string;
 };
 
 /** Componente base: muestra el PNG real según pose, o emoji de respaldo */
@@ -380,6 +384,7 @@ export function UnitSprite({
 	fallback,
 	folder,
 	spriteKey,
+	fixedAssetId,
 }: UnitSpriteProps) {
 	const borderColor =
 		pose === 'attack'
@@ -390,8 +395,11 @@ export function UnitSprite({
 					? '#555'
 					: '#3a3a45';
 
-	const source =
-		folder && spriteKey ? getSpriteSource(folder, spriteKey, pose) : null;
+	const source = fixedAssetId
+		? getSpriteById(fixedAssetId)
+		: folder && spriteKey
+			? getSpriteSource(folder, spriteKey, pose)
+			: null;
 
 	return (
 		<View
@@ -447,17 +455,35 @@ export function HeroSprite({
 	pose: SpritePose;
 	focused?: boolean;
 }) {
-	const ref = getHeroSprite(hero.class);
 	const size = focused ? SPRITE_SIZE_FOCUS : SPRITE_SIZE;
-	const fallback = CLASS_BASE[hero.class] ?? '👤';
+	const status = getHeroSpriteStatus(hero);
+	const { key, usePose } = getHeroSpriteKey(hero.class, status);
+	const fallback =
+		status === 'dead'
+			? '💀'
+			: status === 'stone'
+				? '🪨'
+				: (CLASS_BASE[hero.class] ?? '👤');
+
+	// stone / dead: un solo PNG sin pose; sano/herido: _f/_m + idle|attack|defend
+	if (!usePose) {
+		return (
+			<UnitSprite
+				pose="idle"
+				size={size}
+				fallback={fallback}
+				fixedAssetId={`heroes/${key}`}
+			/>
+		);
+	}
 
 	return (
 		<UnitSprite
 			pose={pose}
 			size={size}
 			fallback={fallback}
-			folder={ref?.folder}
-			spriteKey={ref?.key}
+			folder="heroes"
+			spriteKey={key}
 		/>
 	);
 }
