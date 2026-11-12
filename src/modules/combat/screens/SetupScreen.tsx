@@ -196,6 +196,7 @@ export default function SetupScreen({ onStart }: Props) {
 					visible={!!sheetHero}
 					onClose={() => setSheetHeroId(null)}
 					onChange={updateHero}
+					party={heroes}
 				/>
 			)}
 		</View>

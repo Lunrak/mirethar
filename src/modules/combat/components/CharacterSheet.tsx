@@ -1,497 +1,589 @@
 /**
- * Hoja de personaje – vista desde preparación de combate
- * Izquierda: datos 4AD (clase, life, rasgos, riqueza)
- * Centro: silueta + ranuras de equipo
- * Derecha: opciones de equipo inicial nivel 1
+ * Hoja de personaje – preparación de combate
+ * Click en ranura → elegir variante permitida por clase (4AD)
  */
 
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
-  View,
-  Text,
-  StyleSheet,
-  Pressable,
-  ScrollView,
-  Modal,
+	View,
+	Text,
+	StyleSheet,
+	Pressable,
+	ScrollView,
+	Modal,
 } from 'react-native';
 import type { Hero } from '../../../core/types/combat';
 import { CLASSES, type HeroClass } from '../../../core/data/classes';
-import { ITEMS, type EquipmentSlot, type Item } from '../../../core/data/items';
+import {
+	ITEMS,
+	isTwoHanded,
+	isTorch,
+	hasFreeHand,
+	type EquipmentSlot,
+	type Item,
+} from '../../../core/data/items';
+import {
+	optionsForSlot,
+	applySlotChoice,
+	type SlotOption,
+} from '../../../core/data/equipmentOptions';
 import { HeroGearIcons } from './UnitVisuals';
 
 const CLASS_ES: Record<HeroClass, string> = {
-  warrior: 'Guerrero',
-  rogue: 'Pícaro',
-  cleric: 'Clérigo',
-  wizard: 'Mago',
+	warrior: 'Guerrero',
+	rogue: 'Pícaro',
+	cleric: 'Clérigo',
+	wizard: 'Mago',
 };
 
 const CLASS_ICON: Record<HeroClass, string> = {
-  warrior: '🪖',
-  rogue: '🥷',
-  cleric: '🙏',
-  wizard: '🧙',
+	warrior: '🪖',
+	rogue: '🥷',
+	cleric: '🙏',
+	wizard: '🧙',
 };
 
 const SLOT_LABEL: Record<EquipmentSlot, string> = {
-  armor: 'Armadura',
-  shield: 'Escudo',
-  mainHand: 'Mano dcha.',
-  offHand: 'Mano izq.',
-  misc: 'Misc',
-  spellbook: 'Grimorio',
+	armor: 'Armadura',
+	shield: 'Escudo / mano izq.',
+	mainHand: 'Mano dcha. (arma)',
+	offHand: 'Mano izq.',
+	misc: 'Misc',
+	spellbook: 'Grimorio',
 };
-
-/** Ranuras visibles en el muñeco de papel */
-const PAPER_SLOTS: EquipmentSlot[] = [
-  'armor',
-  'mainHand',
-  'offHand',
-  'shield',
-  'spellbook',
-  'misc',
-];
-
-/**
- * Opciones de carga inicial nivel 1 según 4AD (variantes del manual).
- * Cada opción es un set parcial de slots → items.
- */
-export type LoadoutOption = {
-  id: string;
-  label: string;
-  hint: string;
-  /** Reemplaza estos slots; el resto del equipo de clase se mantiene si no se toca */
-  apply: Partial<Record<EquipmentSlot, string | null>>;
-};
-
-export function startingLoadouts(heroClass: HeroClass): LoadoutOption[] {
-  switch (heroClass) {
-    case 'warrior':
-      return [
-        {
-          id: 'w_shield',
-          label: 'Arma + escudo',
-          hint: 'Estándar: armadura ligera, escudo, arma de mano',
-          apply: {
-            armor: 'light_armor',
-            shield: 'shield',
-            mainHand: 'hand_weapon',
-            offHand: null,
-          },
-        },
-        {
-          id: 'w_2h',
-          label: 'Arma a dos manos',
-          hint: 'Cambia escudo + arma de mano por arma a 2 manos',
-          apply: {
-            armor: 'light_armor',
-            shield: null,
-            mainHand: 'two_handed_weapon',
-            offHand: null,
-          },
-        },
-        {
-          id: 'w_bow',
-          label: 'Arco',
-          hint: 'Cambia escudo + arma de mano por arco',
-          apply: {
-            armor: 'light_armor',
-            shield: null,
-            mainHand: 'bow',
-            offHand: null,
-          },
-        },
-        {
-          id: 'w_heavy',
-          label: 'Armadura pesada',
-          hint: 'Misma carga con armadura pesada (permitida al guerrero)',
-          apply: {
-            armor: 'heavy_armor',
-            shield: 'shield',
-            mainHand: 'hand_weapon',
-            offHand: null,
-          },
-        },
-      ];
-    case 'rogue':
-      return [
-        {
-          id: 'r_std',
-          label: 'Carga estándar',
-          hint: 'Armadura ligera, arma ligera, ganzúas y cuerda',
-          apply: {
-            armor: 'light_armor',
-            mainHand: 'light_hand_weapon',
-            shield: null,
-            misc: 'lockpicks',
-          },
-        },
-        {
-          id: 'r_sling',
-          label: 'Honda',
-          hint: 'Arma a distancia ligera (sling)',
-          apply: {
-            armor: 'light_armor',
-            mainHand: 'sling',
-            shield: null,
-            misc: 'lockpicks',
-          },
-        },
-      ];
-    case 'cleric':
-      return [
-        {
-          id: 'c_std',
-          label: 'Arma + escudo',
-          hint: 'Armadura ligera, escudo, arma de mano, símbolo sagrado',
-          apply: {
-            armor: 'light_armor',
-            shield: 'shield',
-            mainHand: 'hand_weapon',
-            offHand: null,
-            misc: 'holy_symbol',
-          },
-        },
-        {
-          id: 'c_crush',
-          label: 'Arma contundente',
-          hint: '+1 vs esqueletos / rats esqueléticos',
-          apply: {
-            armor: 'light_armor',
-            shield: 'shield',
-            mainHand: 'crushing_weapon',
-            offHand: null,
-            misc: 'holy_symbol',
-          },
-        },
-        {
-          id: 'c_2h',
-          label: 'Arma a dos manos',
-          hint: 'Cambia escudo + arma de mano por arma a 2 manos',
-          apply: {
-            armor: 'light_armor',
-            shield: null,
-            mainHand: 'two_handed_weapon',
-            offHand: null,
-            misc: 'holy_symbol',
-          },
-        },
-      ];
-    case 'wizard':
-      return [
-        {
-          id: 'z_std',
-          label: 'Arma ligera',
-          hint: 'Sin armadura; arma ligera, grimorio, útiles de escritura',
-          apply: {
-            armor: null,
-            shield: null,
-            mainHand: 'light_hand_weapon',
-            spellbook: 'spellbook',
-            misc: 'writing_implements',
-          },
-        },
-        {
-          id: 'z_sling',
-          label: 'Honda',
-          hint: 'Arma a distancia permitida al mago',
-          apply: {
-            armor: null,
-            shield: null,
-            mainHand: 'sling',
-            spellbook: 'spellbook',
-            misc: 'writing_implements',
-          },
-        },
-      ];
-    default:
-      return [];
-  }
-}
-
-function applyLoadout(hero: Hero, option: LoadoutOption): Hero {
-  const equipment = { ...hero.equipment };
-  for (const [slot, itemId] of Object.entries(option.apply)) {
-    const s = slot as EquipmentSlot;
-    if (itemId == null) {
-      delete equipment[s];
-    } else {
-      const item = ITEMS[itemId];
-      if (item) equipment[s] = item;
-    }
-  }
-  // Arma a 2 manos: no debe quedar escudo
-  if (equipment.mainHand?.tags?.includes('two-handed')) {
-    delete equipment.shield;
-    delete equipment.offHand;
-  }
-  return { ...hero, equipment };
-}
 
 type Props = {
-  hero: Hero;
-  visible: boolean;
-  onClose: () => void;
-  onChange: (hero: Hero) => void;
+	hero: Hero;
+	visible: boolean;
+	onClose: () => void;
+	onChange: (hero: Hero) => void;
+	/** Party completa para avisos de antorcha de grupo */
+	party?: Hero[];
 };
 
 function SlotChip({
-  slot,
-  item,
+	slot,
+	item,
+	locked,
+	onPress,
 }: {
-  slot: EquipmentSlot;
-  item?: Item;
+	slot: EquipmentSlot;
+	item?: Item;
+	locked?: boolean;
+	onPress: () => void;
 }) {
-  return (
-    <View style={styles.slotChip}>
-      <Text style={styles.slotLabel}>{SLOT_LABEL[slot]}</Text>
-      <Text style={styles.slotValue} numberOfLines={2}>
-        {item ? item.name : '— vacío —'}
-      </Text>
-    </View>
-  );
+	return (
+		<Pressable
+			onPress={onPress}
+			disabled={locked}
+			style={[styles.slotChip, locked && styles.slotLocked]}
+			accessibilityRole="button"
+			accessibilityLabel={`${SLOT_LABEL[slot]}: ${item?.name ?? 'vacío'}`}
+		>
+			<Text style={styles.slotLabel}>{SLOT_LABEL[slot]}</Text>
+			<Text
+				style={styles.slotValue}
+				numberOfLines={2}
+			>
+				{locked
+					? 'Ocupada (2 manos)'
+					: item
+						? item.name
+						: '— tocar para elegir —'}
+			</Text>
+			{item?.rules?.[0] ? (
+				<Text
+					style={styles.slotRule}
+					numberOfLines={1}
+				>
+					{item.rules[0]}
+				</Text>
+			) : null}
+		</Pressable>
+	);
 }
 
-export function CharacterSheet({ hero, visible, onClose, onChange }: Props) {
-  const def = CLASSES[hero.class];
-  const loadouts = useMemo(() => startingLoadouts(hero.class), [hero.class]);
+export function CharacterSheet({
+	hero,
+	visible,
+	onClose,
+	onChange,
+	party,
+}: Props) {
+	const def = CLASSES[hero.class];
+	const [pickerSlot, setPickerSlot] = useState<EquipmentSlot | null>(null);
 
-  return (
-    <Modal visible={visible} animationType="fade" transparent>
-      <View style={styles.backdrop}>
-        <View style={styles.sheet}>
-          <View style={styles.sheetHeader}>
-            <Text style={styles.sheetTitle}>
-              Hoja de personaje · {CLASS_ES[hero.class]}
-            </Text>
-            <Pressable onPress={onClose} style={styles.closeBtn}>
-              <Text style={styles.closeText}>Cerrar</Text>
-            </Pressable>
-          </View>
+	const twoHanded = isTwoHanded(hero.equipment.mainHand);
+	const bow = !!hero.equipment.mainHand?.tags?.includes('bow');
+	const offLocked = twoHanded || bow;
+	const freeHand = hasFreeHand(hero.equipment);
 
-          <View style={styles.columns}>
-            {/* IZQUIERDA – datos */}
-            <ScrollView style={styles.colLeft} contentContainerStyle={styles.colPad}>
-              <Text style={styles.blockTitle}>Datos</Text>
-              <Text style={styles.statName}>{hero.name}</Text>
-              <Text style={styles.statLine}>
-                {CLASS_ES[hero.class]} · Nivel {hero.level}
-              </Text>
-              <Text style={styles.statLine}>
-                Life {hero.life}/{hero.maxLife}{' '}
-                <Text style={styles.muted}>({def.lifeFormula})</Text>
-              </Text>
-              {hero.healingUsesLeft != null && (
-                <Text style={styles.statLine}>
-                  Curaciones: {hero.healingUsesLeft}/3
-                </Text>
-              )}
-              {hero.spells && hero.spells.length > 0 && (
-                <Text style={styles.statLine}>
-                  Hechizos: {hero.spells.join(', ')}
-                </Text>
-              )}
+	const partyHasTorch = useMemo(() => {
+		const list = party ?? [hero];
+		return list.some((h) => {
+			const eq = h.id === hero.id ? hero.equipment : h.equipment;
+			return (
+				isTorch(eq.offHand) ||
+				isTorch(eq.misc) ||
+				isTorch(eq.mainHand) ||
+				Object.values(eq).some((it) => isTorch(it))
+			);
+		});
+	}, [party, hero]);
 
-              <Text style={[styles.blockTitle, { marginTop: 12 }]}>Rasgos</Text>
-              {def.traits.map((t) => (
-                <Text key={t} style={styles.trait}>
-                  • {t}
-                </Text>
-              ))}
+	const warnings = useMemo(() => {
+		const w: string[] = [];
+		if (hero.class === 'wizard' && !freeHand) {
+			w.push(
+				'Mago: necesita una mano libre para lanzar conjuros. Suelta el arma o la antorcha/escudo de la otra mano.',
+			);
+		}
+		if (!partyHasTorch) {
+			w.push(
+				'Ningún héroe lleva antorcha: en zonas oscuras el grupo puede sufrir penalizadores (manual 4AD).',
+			);
+		}
+		if (twoHanded) {
+			w.push(
+				'Arma a dos manos: no puedes equipar escudo ni antorcha en la mano izquierda.',
+			);
+		}
+		if (bow) {
+			w.push(
+				'Arco: ocupa el uso de las manos; sin escudo ni antorcha en off-hand.',
+			);
+		}
+		return w;
+	}, [hero.class, freeHand, partyHasTorch, twoHanded, bow]);
 
-              <Text style={[styles.blockTitle, { marginTop: 12 }]}>Notas</Text>
-              {(def.notes ?? []).map((n) => (
-                <Text key={n} style={styles.trait}>
-                  • {n}
-                </Text>
-              ))}
-              <Text style={styles.trait}>
-                • Armadura: {def.armorAllowed.join(', ')}
-              </Text>
-              <Text style={styles.trait}>
-                • Armas: {def.weaponsAllowed.join(', ')}
-              </Text>
-            </ScrollView>
+	const pickerOptions: SlotOption[] = useMemo(() => {
+		if (!pickerSlot) return [];
+		return optionsForSlot(hero.class, pickerSlot, hero.equipment);
+	}, [pickerSlot, hero.class, hero.equipment]);
 
-            {/* CENTRO – silueta + ranuras */}
-            <View style={styles.colCenter}>
-              <Text style={styles.blockTitle}>Equipo</Text>
-              <View style={styles.paper}>
-                <View style={styles.paperTop}>
-                  <SlotChip slot="armor" item={hero.equipment.armor} />
-                  <SlotChip slot="spellbook" item={hero.equipment.spellbook} />
-                </View>
-                <View style={styles.paperMid}>
-                  <SlotChip slot="mainHand" item={hero.equipment.mainHand} />
-                  <View style={styles.portrait}>
-                    <Text style={styles.portraitIcon}>{CLASS_ICON[hero.class]}</Text>
-                    <HeroGearIcons hero={hero} />
-                    <Text style={styles.portraitName} numberOfLines={1}>
-                      {hero.name}
-                    </Text>
-                  </View>
-                  <SlotChip
-                    slot="offHand"
-                    item={hero.equipment.offHand ?? hero.equipment.shield}
-                  />
-                </View>
-                <View style={styles.paperBot}>
-                  <SlotChip slot="shield" item={hero.equipment.shield} />
-                  <SlotChip slot="misc" item={hero.equipment.misc} />
-                </View>
-              </View>
-              <Text style={styles.mutedCenter}>
-                Ranuras según tienda / botín del manual (MVP)
-              </Text>
-            </View>
+	const choose = (opt: SlotOption) => {
+		if (!pickerSlot) return;
+		const equipment = applySlotChoice(hero.equipment, pickerSlot, opt.itemId);
+		onChange({ ...hero, equipment });
+		setPickerSlot(null);
+	};
 
-            {/* DERECHA – variantes nivel 1 */}
-            <ScrollView style={styles.colRight} contentContainerStyle={styles.colPad}>
-              <Text style={styles.blockTitle}>Carga nivel 1</Text>
-              <Text style={styles.muted}>
-                Variantes del manual al crear el personaje
-              </Text>
-              {loadouts.map((opt) => (
-                <Pressable
-                  key={opt.id}
-                  onPress={() => onChange(applyLoadout(hero, opt))}
-                  style={styles.loadoutBtn}
-                >
-                  <Text style={styles.loadoutLabel}>{opt.label}</Text>
-                  <Text style={styles.loadoutHint}>{opt.hint}</Text>
-                </Pressable>
-              ))}
-            </ScrollView>
-          </View>
-        </View>
-      </View>
-    </Modal>
-  );
+	const openOffHand = () => {
+		// Unificamos shield/offHand en el picker de "mano izq"
+		setPickerSlot(
+			offLocked ? 'offHand' : hero.equipment.shield ? 'shield' : 'offHand',
+		);
+	};
+
+	return (
+		<Modal
+			visible={visible}
+			animationType="fade"
+			transparent
+		>
+			<View style={styles.backdrop}>
+				<View style={styles.sheet}>
+					<View style={styles.sheetHeader}>
+						<Text style={styles.sheetTitle}>Hoja · {CLASS_ES[hero.class]}</Text>
+						<Pressable
+							onPress={onClose}
+							style={styles.closeBtn}
+						>
+							<Text style={styles.closeText}>Cerrar</Text>
+						</Pressable>
+					</View>
+
+					<View style={styles.columns}>
+						{/* IZQUIERDA – datos */}
+						<ScrollView
+							style={styles.colLeft}
+							contentContainerStyle={styles.colPad}
+						>
+							<Text style={styles.blockTitle}>Datos</Text>
+							<Text style={styles.statName}>{hero.name}</Text>
+							<Text style={styles.statLine}>
+								{CLASS_ES[hero.class]} · Nivel {hero.level}
+							</Text>
+							<Text style={styles.statLine}>
+								Life {hero.life}/{hero.maxLife}{' '}
+								<Text style={styles.muted}>({def.lifeFormula})</Text>
+							</Text>
+							{hero.healingUsesLeft != null && (
+								<Text style={styles.statLine}>
+									Curaciones: {hero.healingUsesLeft}/3
+								</Text>
+							)}
+							{hero.spells && hero.spells.length > 0 && (
+								<Text style={styles.statLine}>
+									Hechizos: {hero.spells.join(', ')}
+								</Text>
+							)}
+
+							<Text style={[styles.blockTitle, { marginTop: 12 }]}>Rasgos</Text>
+							{def.traits.map((tr) => (
+								<Text
+									key={tr}
+									style={styles.trait}
+								>
+									• {tr}
+								</Text>
+							))}
+
+							<Text style={[styles.blockTitle, { marginTop: 12 }]}>
+								Reglas de equipo
+							</Text>
+							<Text style={styles.trait}>
+								• Armadura permitida: {def.armorAllowed.join(', ')}
+							</Text>
+							<Text style={styles.trait}>
+								• Armas permitidas: {def.weaponsAllowed.join(', ')}
+							</Text>
+							{(def.notes ?? []).map((n) => (
+								<Text
+									key={n}
+									style={styles.trait}
+								>
+									• {n}
+								</Text>
+							))}
+
+							{warnings.length > 0 && (
+								<>
+									<Text
+										style={[
+											styles.blockTitle,
+											{ marginTop: 12, color: '#e8c547' },
+										]}
+									>
+										Avisos
+									</Text>
+									{warnings.map((w) => (
+										<Text
+											key={w}
+											style={styles.warn}
+										>
+											⚠ {w}
+										</Text>
+									))}
+								</>
+							)}
+						</ScrollView>
+
+						{/* CENTRO – ranuras clicables */}
+						<View style={styles.colCenter}>
+							<Text style={styles.blockTitle}>Equipo (toca una ranura)</Text>
+							<View style={styles.paper}>
+								<View style={styles.paperTop}>
+									<SlotChip
+										slot="armor"
+										item={hero.equipment.armor}
+										onPress={() => setPickerSlot('armor')}
+									/>
+									<SlotChip
+										slot="spellbook"
+										item={hero.equipment.spellbook}
+										onPress={() => setPickerSlot('spellbook')}
+									/>
+								</View>
+								<View style={styles.paperMid}>
+									<SlotChip
+										slot="mainHand"
+										item={hero.equipment.mainHand}
+										onPress={() => setPickerSlot('mainHand')}
+									/>
+									<View style={styles.portrait}>
+										<Text style={styles.portraitIcon}>
+											{CLASS_ICON[hero.class]}
+										</Text>
+										<HeroGearIcons hero={hero} />
+										<Text
+											style={styles.portraitName}
+											numberOfLines={1}
+										>
+											{hero.name}
+										</Text>
+									</View>
+									<SlotChip
+										slot="offHand"
+										item={hero.equipment.offHand ?? hero.equipment.shield}
+										locked={offLocked}
+										onPress={openOffHand}
+									/>
+								</View>
+								<View style={styles.paperBot}>
+									<SlotChip
+										slot="misc"
+										item={hero.equipment.misc}
+										onPress={() => setPickerSlot('misc')}
+									/>
+								</View>
+							</View>
+						</View>
+
+						{/* DERECHA – resumen del equipo actual */}
+						<ScrollView
+							style={styles.colRight}
+							contentContainerStyle={styles.colPad}
+						>
+							<Text style={styles.blockTitle}>Resumen</Text>
+							{(
+								[
+									['Armadura', hero.equipment.armor],
+									['Arma', hero.equipment.mainHand],
+									[
+										'Mano izq.',
+										hero.equipment.offHand ?? hero.equipment.shield,
+									],
+									['Grimorio', hero.equipment.spellbook],
+									['Misc', hero.equipment.misc],
+								] as [string, Item | undefined][]
+							).map(([label, it]) => (
+								<View
+									key={label}
+									style={styles.summaryRow}
+								>
+									<Text style={styles.summaryLabel}>{label}</Text>
+									<Text style={styles.summaryValue}>{it?.name ?? '—'}</Text>
+									{it?.rules?.map((r) => (
+										<Text
+											key={r}
+											style={styles.summaryRule}
+										>
+											{r}
+										</Text>
+									))}
+								</View>
+							))}
+							<Text style={[styles.muted, { marginTop: 10 }]}>
+								Toca una ranura del centro para cambiar entre las variantes de
+								tu clase.
+							</Text>
+						</ScrollView>
+					</View>
+				</View>
+
+				{/* Picker de variantes */}
+				<Modal
+					visible={pickerSlot != null}
+					transparent
+					animationType="slide"
+				>
+					<View style={styles.pickerBackdrop}>
+						<View style={styles.pickerSheet}>
+							<Text style={styles.pickerTitle}>
+								{pickerSlot ? SLOT_LABEL[pickerSlot] : ''}
+							</Text>
+							<Text style={styles.pickerSub}>
+								Variantes permitidas para {CLASS_ES[hero.class]}
+							</Text>
+							<ScrollView style={{ maxHeight: 320 }}>
+								{pickerOptions.map((opt) => {
+									const selected =
+										opt.itemId == null
+											? pickerSlot === 'mainHand'
+												? !hero.equipment.mainHand
+												: pickerSlot === 'armor'
+													? !hero.equipment.armor
+													: pickerSlot === 'spellbook'
+														? !hero.equipment.spellbook
+														: pickerSlot === 'misc'
+															? !hero.equipment.misc
+															: !hero.equipment.shield &&
+																!hero.equipment.offHand
+											: hero.equipment.mainHand?.id === opt.itemId ||
+												hero.equipment.armor?.id === opt.itemId ||
+												hero.equipment.shield?.id === opt.itemId ||
+												hero.equipment.offHand?.id === opt.itemId ||
+												hero.equipment.misc?.id === opt.itemId ||
+												hero.equipment.spellbook?.id === opt.itemId;
+									return (
+										<Pressable
+											key={`${opt.itemId ?? 'empty'}_${opt.label}`}
+											onPress={() => choose(opt)}
+											style={[styles.optBtn, selected && styles.optBtnOn]}
+										>
+											<Text style={styles.optLabel}>{opt.label}</Text>
+											{opt.hint ? (
+												<Text style={styles.optHint}>{opt.hint}</Text>
+											) : null}
+											{opt.itemId && ITEMS[opt.itemId]?.rules ? (
+												<Text style={styles.optHint}>
+													{ITEMS[opt.itemId].rules!.join(' · ')}
+												</Text>
+											) : null}
+										</Pressable>
+									);
+								})}
+							</ScrollView>
+							<Pressable
+								onPress={() => setPickerSlot(null)}
+								style={styles.pickerCancel}
+							>
+								<Text style={styles.pickerCancelText}>Cancelar</Text>
+							</Pressable>
+						</View>
+					</View>
+				</Modal>
+			</View>
+		</Modal>
+	);
 }
 
 const styles = StyleSheet.create({
-  backdrop: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.72)',
-    justifyContent: 'center',
-    padding: 16,
-  },
-  sheet: {
-    flex: 1,
-    maxHeight: '94%',
-    backgroundColor: '#1a1a1e',
-    borderRadius: 14,
-    borderWidth: 2,
-    borderColor: '#3a3a45',
-    overflow: 'hidden',
-  },
-  sheetHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
-    backgroundColor: '#121216',
-    borderBottomWidth: 1,
-    borderBottomColor: '#2a2a32',
-  },
-  sheetTitle: { color: '#e8e6e3', fontSize: 18, fontWeight: '800' },
-  closeBtn: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 8,
-    backgroundColor: '#2a2a35',
-    borderWidth: 1,
-    borderColor: '#3a3a45',
-  },
-  closeText: { color: '#e8e6e3', fontWeight: '700', fontSize: 14 },
-  columns: { flex: 1, flexDirection: 'row' },
-  colLeft: { flex: 1.1, borderRightWidth: 1, borderRightColor: '#2a2a32' },
-  colCenter: {
-    flex: 1.2,
-    padding: 12,
-    borderRightWidth: 1,
-    borderRightColor: '#2a2a32',
-  },
-  colRight: { flex: 1.1 },
-  colPad: { padding: 12, paddingBottom: 24 },
-  blockTitle: {
-    color: '#c9a227',
-    fontSize: 13,
-    fontWeight: '800',
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-    marginBottom: 8,
-  },
-  statName: { color: '#f5f2ea', fontSize: 22, fontWeight: '800', marginBottom: 4 },
-  statLine: { color: '#e8e6e3', fontSize: 15, marginBottom: 3, lineHeight: 21 },
-  trait: { color: '#b8b4ae', fontSize: 13, lineHeight: 19, marginBottom: 4 },
-  muted: { color: '#7a7670', fontSize: 12 },
-  mutedCenter: {
-    color: '#7a7670',
-    fontSize: 11,
-    textAlign: 'center',
-    marginTop: 8,
-  },
-  paper: {
-    flex: 1,
-    justifyContent: 'center',
-    gap: 10,
-  },
-  paperTop: { flexDirection: 'row', justifyContent: 'space-around', gap: 8 },
-  paperMid: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 6,
-  },
-  paperBot: { flexDirection: 'row', justifyContent: 'space-around', gap: 8 },
-  portrait: {
-    width: 120,
-    minHeight: 140,
-    borderRadius: 12,
-    backgroundColor: '#22222a',
-    borderWidth: 2,
-    borderColor: '#c9a227',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 8,
-    gap: 6,
-  },
-  portraitIcon: { fontSize: 48 },
-  portraitName: {
-    color: '#e8e6e3',
-    fontSize: 13,
-    fontWeight: '700',
-    textAlign: 'center',
-  },
-  slotChip: {
-    flex: 1,
-    minWidth: 88,
-    maxWidth: 120,
-    padding: 8,
-    borderRadius: 8,
-    backgroundColor: '#22222a',
-    borderWidth: 1,
-    borderColor: '#3a3a45',
-    borderStyle: 'dashed',
-  },
-  slotLabel: {
-    color: '#7a7670',
-    fontSize: 10,
-    fontWeight: '700',
-    textTransform: 'uppercase',
-    marginBottom: 2,
-  },
-  slotValue: { color: '#e8e6e3', fontSize: 12, fontWeight: '600' },
-  loadoutBtn: {
-    padding: 12,
-    marginBottom: 10,
-    borderRadius: 10,
-    backgroundColor: '#22222a',
-    borderWidth: 2,
-    borderColor: '#3a3a45',
-  },
-  loadoutLabel: { color: '#f0d78c', fontSize: 15, fontWeight: '700' },
-  loadoutHint: { color: '#9a9690', fontSize: 12, marginTop: 4, lineHeight: 17 },
+	backdrop: {
+		flex: 1,
+		backgroundColor: 'rgba(0,0,0,0.72)',
+		justifyContent: 'center',
+		padding: 16,
+	},
+	sheet: {
+		flex: 1,
+		maxHeight: '94%',
+		backgroundColor: '#1a1a1e',
+		borderRadius: 14,
+		borderWidth: 2,
+		borderColor: '#3a3a45',
+		overflow: 'hidden',
+	},
+	sheetHeader: {
+		flexDirection: 'row',
+		alignItems: 'center',
+		justifyContent: 'space-between',
+		paddingHorizontal: 16,
+		paddingVertical: 12,
+		backgroundColor: '#121216',
+		borderBottomWidth: 1,
+		borderBottomColor: '#2a2a32',
+	},
+	sheetTitle: { color: '#e8e6e3', fontSize: 18, fontWeight: '800' },
+	closeBtn: {
+		paddingHorizontal: 14,
+		paddingVertical: 8,
+		borderRadius: 8,
+		backgroundColor: '#2a2a35',
+		borderWidth: 1,
+		borderColor: '#3a3a45',
+	},
+	closeText: { color: '#e8e6e3', fontWeight: '700', fontSize: 14 },
+	columns: { flex: 1, flexDirection: 'row' },
+	colLeft: { flex: 1.1, borderRightWidth: 1, borderRightColor: '#2a2a32' },
+	colCenter: {
+		flex: 1.25,
+		padding: 12,
+		borderRightWidth: 1,
+		borderRightColor: '#2a2a32',
+	},
+	colRight: { flex: 1 },
+	colPad: { padding: 12, paddingBottom: 24 },
+	blockTitle: {
+		color: '#c9a227',
+		fontSize: 13,
+		fontWeight: '800',
+		textTransform: 'uppercase',
+		letterSpacing: 1,
+		marginBottom: 8,
+	},
+	statName: {
+		color: '#f5f2ea',
+		fontSize: 22,
+		fontWeight: '800',
+		marginBottom: 4,
+	},
+	statLine: { color: '#e8e6e3', fontSize: 15, marginBottom: 3, lineHeight: 21 },
+	trait: { color: '#b8b4ae', fontSize: 13, lineHeight: 19, marginBottom: 4 },
+	warn: { color: '#e8c547', fontSize: 13, lineHeight: 19, marginBottom: 6 },
+	muted: { color: '#7a7670', fontSize: 12 },
+	paper: { flex: 1, justifyContent: 'center', gap: 10 },
+	paperTop: { flexDirection: 'row', justifyContent: 'space-around', gap: 8 },
+	paperMid: {
+		flexDirection: 'row',
+		alignItems: 'center',
+		justifyContent: 'space-between',
+		gap: 6,
+	},
+	paperBot: { flexDirection: 'row', justifyContent: 'center', gap: 8 },
+	portrait: {
+		width: 120,
+		minHeight: 140,
+		borderRadius: 12,
+		backgroundColor: '#22222a',
+		borderWidth: 2,
+		borderColor: '#c9a227',
+		alignItems: 'center',
+		justifyContent: 'center',
+		padding: 8,
+		gap: 6,
+	},
+	portraitIcon: { fontSize: 48 },
+	portraitName: {
+		color: '#e8e6e3',
+		fontSize: 13,
+		fontWeight: '700',
+		textAlign: 'center',
+	},
+	slotChip: {
+		flex: 1,
+		minWidth: 96,
+		maxWidth: 130,
+		padding: 8,
+		borderRadius: 8,
+		backgroundColor: '#22222a',
+		borderWidth: 1,
+		borderColor: '#5dce7a',
+		borderStyle: 'dashed',
+	},
+	slotLocked: {
+		borderColor: '#5a5650',
+		opacity: 0.7,
+	},
+	slotLabel: {
+		color: '#7a7670',
+		fontSize: 10,
+		fontWeight: '700',
+		textTransform: 'uppercase',
+		marginBottom: 2,
+	},
+	slotValue: { color: '#e8e6e3', fontSize: 12, fontWeight: '600' },
+	slotRule: { color: '#9a9690', fontSize: 10, marginTop: 2 },
+	summaryRow: {
+		marginBottom: 10,
+		paddingBottom: 8,
+		borderBottomWidth: StyleSheet.hairlineWidth,
+		borderBottomColor: '#2a2a32',
+	},
+	summaryLabel: { color: '#7a7670', fontSize: 11, fontWeight: '700' },
+	summaryValue: { color: '#e8e6e3', fontSize: 14, fontWeight: '700' },
+	summaryRule: { color: '#9a9690', fontSize: 11 },
+	pickerBackdrop: {
+		flex: 1,
+		backgroundColor: 'rgba(0,0,0,0.55)',
+		justifyContent: 'flex-end',
+	},
+	pickerSheet: {
+		backgroundColor: '#1a1a1e',
+		borderTopLeftRadius: 16,
+		borderTopRightRadius: 16,
+		padding: 16,
+		borderWidth: 1,
+		borderColor: '#3a3a45',
+	},
+	pickerTitle: { color: '#f0d78c', fontSize: 18, fontWeight: '800' },
+	pickerSub: { color: '#9a9690', fontSize: 13, marginBottom: 12 },
+	optBtn: {
+		padding: 12,
+		marginBottom: 8,
+		borderRadius: 10,
+		backgroundColor: '#22222a',
+		borderWidth: 2,
+		borderColor: '#3a3a45',
+	},
+	optBtnOn: { borderColor: '#c9a227', backgroundColor: '#3a3420' },
+	optLabel: { color: '#e8e6e3', fontSize: 15, fontWeight: '700' },
+	optHint: { color: '#9a9690', fontSize: 12, marginTop: 3 },
+	pickerCancel: {
+		marginTop: 8,
+		padding: 12,
+		alignItems: 'center',
+	},
+	pickerCancelText: { color: '#9a9690', fontWeight: '700' },
 });
