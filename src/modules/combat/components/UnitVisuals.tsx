@@ -375,6 +375,10 @@ type UnitSpriteProps = {
 	spriteKey?: string;
 	/** Id completo sin pose, p. ej. "heroes/cleric_dead" */
 	fixedAssetId?: string;
+	/** Espejo horizontal (enemigos miran hacia los héroes) */
+	flipX?: boolean;
+	/** Sin marco (tokens compactos de minion) */
+	bare?: boolean;
 };
 
 /** Componente base: muestra el PNG real según pose, o emoji de respaldo */
@@ -385,6 +389,8 @@ export function UnitSprite({
 	folder,
 	spriteKey,
 	fixedAssetId,
+	flipX = false,
+	bare = false,
 }: UnitSpriteProps) {
 	const borderColor =
 		pose === 'attack'
@@ -404,19 +410,19 @@ export function UnitSprite({
 	return (
 		<View
 			style={[
-				spriteStyles.wrap,
+				bare ? spriteStyles.wrapBare : spriteStyles.wrap,
 				{
 					width: size,
 					height: size,
-					borderColor,
-					borderWidth: pose === 'idle' ? 1 : 2,
+					borderColor: bare ? 'transparent' : borderColor,
+					borderWidth: bare ? 0 : pose === 'idle' ? 1 : 2,
 				},
 			]}
 		>
 			{source ? (
 				<Image
 					source={source}
-					style={spriteStyles.image}
+					style={[spriteStyles.image, flipX && { transform: [{ scaleX: -1 }] }]}
 					resizeMode="contain"
 					accessibilityLabel={`sprite ${spriteKey} ${pose}`}
 				/>
@@ -493,13 +499,20 @@ export function EnemySprite({
 	enemy,
 	pose,
 	focused = false,
+	size: sizeProp,
+	bare = false,
+	flipX = true,
 }: {
 	enemy: EnemyInstance;
 	pose: SpritePose;
 	focused?: boolean;
+	size?: number;
+	bare?: boolean;
+	/** Por defecto true: miran hacia los héroes */
+	flipX?: boolean;
 }) {
 	const ref = getEnemySprite(enemy.templateId);
-	const size = focused ? SPRITE_SIZE_FOCUS : SPRITE_SIZE;
+	const size = sizeProp ?? (focused ? SPRITE_SIZE_FOCUS : SPRITE_SIZE);
 	// Solo muertos usan sprite _dead; la huida se muestra como texto en el campo
 	const killed = enemy.currentLife <= 0 && !enemy.fled;
 	const effectivePose: SpritePose = killed ? 'dead' : pose;
@@ -512,6 +525,8 @@ export function EnemySprite({
 			fallback={fallback}
 			folder={ref?.folder}
 			spriteKey={ref?.key}
+			flipX={flipX}
+			bare={bare}
 		/>
 	);
 }
@@ -525,6 +540,12 @@ const spriteStyles = StyleSheet.create({
 		borderRadius: 8,
 		backgroundColor: '#1a1a22',
 		overflow: 'hidden',
+	},
+	wrapBare: {
+		alignItems: 'center',
+		justifyContent: 'center',
+		backgroundColor: 'transparent',
+		overflow: 'visible',
 	},
 	image: {
 		width: '100%',

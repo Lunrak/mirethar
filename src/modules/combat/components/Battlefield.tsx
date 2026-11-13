@@ -324,115 +324,168 @@ export function Battlefield({
 				<Text style={styles.vs}>VS</Text>
 
 				{/* Enemigos */}
-				<View style={styles.col}>
+				<View style={styles.enemyCol}>
 					<Text style={styles.colTitle}>Enemigos</Text>
-					{enemies.map((e) => {
-						const fled = !!e.fled;
-						const killed = e.currentLife <= 0 && !fled;
-						const outOfFight = killed || fled;
-						const selected = e.id === selectedTargetId;
-						const isPrimary =
-							selected && (targetingEnemy || targetAutoSelected);
-						const selectable =
-							canTap && targetingEnemy && !outOfFight && !targetAutoSelected;
-						const hit =
-							impactKey != null &&
-							(e.id === impactTargetId || e.id === impactActorId);
-						const maxLife = getEnemyMaxLife(e);
-						const showLifeBar = maxLife > 1;
-						// Solo muertos usan pose dead (sprite); huida = texto "huyó"
-						const pose = resolvePose(
-							e.id,
-							impactActorId,
-							impactTargetId,
-							killed,
-						);
-						const focused = !!hit && !outOfFight;
-						const template = getEnemyTemplate(e.templateId);
-						const typeLabel = enemyTypeLabel(
-							template?.type ?? inferTypeFromId(e.templateId),
-						);
-						const poseHint =
-							pose === 'attack'
-								? ' · ataca'
-								: pose === 'defend'
-									? ' · defiende'
-									: '';
+					{(() => {
+						const swarm = enemies.filter((e) => getEnemyMaxLife(e) <= 1);
+						const elites = enemies.filter((e) => getEnemyMaxLife(e) > 1);
+						const n = swarm.length;
+						// Tamaño de token para que quepan en 2–3 filas
+						const tokenSize = n > 14 ? 40 : n > 9 ? 48 : n > 5 ? 52 : 56;
+						const renderToken = (e: EnemyInstance) => {
+							const fled = !!e.fled;
+							const killed = e.currentLife <= 0 && !fled;
+							const outOfFight = killed || fled;
+							const selected = e.id === selectedTargetId;
+							const isPrimary =
+								selected && (targetingEnemy || targetAutoSelected);
+							const selectable =
+								canTap && targetingEnemy && !outOfFight && !targetAutoSelected;
+							const hit =
+								impactKey != null &&
+								(e.id === impactTargetId || e.id === impactActorId);
+							const pose = resolvePose(
+								e.id,
+								impactActorId,
+								impactTargetId,
+								killed,
+							);
+							const focused = !!hit && !outOfFight;
+							const maxLife = getEnemyMaxLife(e);
+							const showLifeBar = maxLife > 1;
 
-						return (
-							<FleeSlide
-								key={e.id}
-								active={fled}
-								style={{ width: '100%' }}
-							>
-								<UnitCardShell
-									activeImpact={!!hit && !fled}
-									impactKey={impactKey}
-									isPrimaryTarget={!!isPrimary && !fled}
-									style={[
-										styles.card,
-										styles.cardEnemy,
-										selected && styles.cardSelectedEnemy,
-										outOfFight && styles.cardDown,
-										selectable && styles.cardSelectableEnemy,
-										fled && { opacity: 0.7, borderColor: '#5a5650' },
-									]}
+							if (showLifeBar) {
+								// Boss / multi-life: tarjeta compacta
+								return (
+									<FleeSlide
+										key={e.id}
+										active={fled}
+										style={{ width: '100%' }}
+									>
+										<UnitCardShell
+											activeImpact={!!hit && !fled}
+											impactKey={impactKey}
+											isPrimaryTarget={!!isPrimary && !fled}
+											style={[
+												styles.card,
+												styles.cardEnemy,
+												selected && styles.cardSelectedEnemy,
+												outOfFight && styles.cardDown,
+												selectable && styles.cardSelectableEnemy,
+											]}
+										>
+											<Pressable
+												disabled={!selectable}
+												onPress={() => onSelectEnemy(e.id)}
+												style={({ pressed }) => [
+													styles.eliteInner,
+													pressed && selectable && styles.cardPressed,
+												]}
+											>
+												<View style={styles.eliteSpriteCol}>
+													{fled ? (
+														<View style={styles.fledBox}>
+															<Text style={styles.fledText}>huyó</Text>
+														</View>
+													) : (
+														<EnemySprite
+															enemy={e}
+															pose={pose}
+															focused={focused}
+															flipX
+														/>
+													)}
+													{(selected || isPrimary) && !fled && (
+														<View style={styles.selectOval} />
+													)}
+												</View>
+												<View style={{ flex: 1 }}>
+													<Text
+														style={styles.name}
+														numberOfLines={1}
+													>
+														{e.name}
+													</Text>
+													<Text style={styles.meta}>
+														L{e.level} · Atk {e.attacks}
+													</Text>
+													{!fled && (
+														<LifeBar
+															current={killed ? 0 : e.currentLife}
+															max={maxLife}
+															isEnemy
+														/>
+													)}
+												</View>
+											</Pressable>
+										</UnitCardShell>
+									</FleeSlide>
+								);
+							}
+
+							// Minion / vermin 1 life: token compacto en rejilla
+							return (
+								<FleeSlide
+									key={e.id}
+									active={fled}
+									style={styles.tokenWrap}
 								>
 									<Pressable
 										disabled={!selectable}
 										onPress={() => onSelectEnemy(e.id)}
-										hitSlop={6}
 										style={({ pressed }) => [
+											styles.token,
+											outOfFight && styles.tokenDown,
 											pressed && selectable && styles.cardPressed,
 										]}
 										accessibilityRole="button"
-										accessibilityLabel={
-											showLifeBar
-												? `${e.name}, ${typeLabel}, level ${e.level}, life ${e.currentLife} de ${maxLife}`
-												: `${e.name}, ${typeLabel}, level ${e.level}`
-										}
+										accessibilityLabel={`${e.name}, level ${e.level}`}
 									>
-										<View style={styles.enemyTop}>
-											{fled ? (
-												<View style={styles.fledBox}>
-													<Text style={styles.fledText}>huyó</Text>
-												</View>
-											) : (
-												<EnemySprite
-													enemy={e}
-													pose={pose}
-													focused={focused}
-												/>
-											)}
-											<View style={{ flex: 1 }}>
-												<Text
-													style={styles.name}
-													numberOfLines={1}
-												>
-													{e.name}
-												</Text>
-												<Text style={styles.meta}>
-													{fled
-														? 'Fuera de combate'
-														: showLifeBar
-															? `L${e.level} · Atk ${e.attacks}${poseHint}`
-															: `${typeLabel} · L${e.level}${poseHint}`}
-												</Text>
+										<Text
+											style={styles.tokenName}
+											numberOfLines={1}
+										>
+											{e.name}
+										</Text>
+										<Text style={styles.tokenLevel}>L{e.level}</Text>
+										{fled ? (
+											<View
+												style={[
+													styles.fledBox,
+													{ width: tokenSize, height: tokenSize },
+												]}
+											>
+												<Text style={styles.fledText}>huyó</Text>
 											</View>
-										</View>
-										<StatusBadges enemy={e} />
-										{showLifeBar && !fled && (
-											<LifeBar
-												current={killed ? 0 : e.currentLife}
-												max={maxLife}
-												isEnemy
+										) : (
+											<EnemySprite
+												enemy={e}
+												pose={pose}
+												focused={focused}
+												size={tokenSize}
+												bare
+												flipX
 											/>
 										)}
+										{(selected || isPrimary) && !outOfFight && (
+											<View style={styles.selectOval} />
+										)}
 									</Pressable>
-								</UnitCardShell>
-							</FleeSlide>
+								</FleeSlide>
+							);
+						};
+
+						return (
+							<>
+								{elites.map((e) => renderToken(e))}
+								{swarm.length > 0 && (
+									<View style={styles.swarmGrid}>
+										{swarm.map((e) => renderToken(e))}
+									</View>
+								)}
+							</>
 						);
-					})}
+					})()}
 				</View>
 			</View>
 		</View>
