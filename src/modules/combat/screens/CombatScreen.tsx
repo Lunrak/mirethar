@@ -123,7 +123,30 @@ export default function CombatScreen({
 
 	return (
 		<View style={styles.root}>
-			<View style={styles.header}>
+			{/* Campo de batalla a pantalla completa */}
+			<View style={styles.field}>
+				<Battlefield
+					heroes={state.heroes}
+					enemies={state.enemies}
+					currentActorId={state.currentActorId}
+					selectedTargetId={state.selectedTargetId}
+					selectedAction={state.selectedAction}
+					phase={state.phase}
+					targetAutoSelected={targetAutoSelected}
+					impactTargetId={focusTargetId}
+					impactActorId={focusActorId}
+					impactKey={lastFeedback?.id ?? null}
+					onSelectEnemy={selectEnemyTarget}
+					onSelectHero={onSelectHeroTarget}
+				/>
+				<CombatFeedback feedback={lastFeedback} />
+			</View>
+
+			{/* Header transparente superpuesto */}
+			<View
+				style={styles.header}
+				pointerEvents="box-none"
+			>
 				<View>
 					<Text style={styles.headerTitle}>Combate</Text>
 					<Text style={styles.headerMeta}>
@@ -152,7 +175,11 @@ export default function CombatScreen({
 				</View>
 			</View>
 
-			<View style={styles.body}>
+			{/* Acciones izquierda, info objetivo derecha — overlays */}
+			<View
+				style={styles.leftRail}
+				pointerEvents="box-none"
+			>
 				<ActionPanel
 					actions={actions}
 					selected={state.selectedAction}
@@ -161,28 +188,12 @@ export default function CombatScreen({
 					targetAutoSelected={targetAutoSelected}
 					onSelect={selectHeroAction}
 				/>
+			</View>
 
-				<View style={styles.cameraClip}>
-					<View style={styles.cameraStage}>
-						<Battlefield
-							heroes={state.heroes}
-							enemies={state.enemies}
-							currentActorId={state.currentActorId}
-							selectedTargetId={state.selectedTargetId}
-							selectedAction={state.selectedAction}
-							phase={state.phase}
-							targetAutoSelected={targetAutoSelected}
-							impactTargetId={focusTargetId}
-							impactActorId={focusActorId}
-							impactKey={lastFeedback?.id ?? null}
-							onSelectEnemy={selectEnemyTarget}
-							onSelectHero={onSelectHeroTarget}
-						/>
-					</View>
-
-					<CombatFeedback feedback={lastFeedback} />
-				</View>
-
+			<View
+				style={styles.rightRail}
+				pointerEvents="box-none"
+			>
 				<TargetInfoPanel
 					enemy={selectedTargetEnemy}
 					hero={selectedTargetHero}
@@ -199,57 +210,99 @@ export default function CombatScreen({
 				<CombatLog entries={state.log} />
 			</View>
 
-			<CentralDice
-				diceUi={diceUi}
-				lastTotal={lastDiceTotal}
-				disabled={state.isFinished}
-				onPress={onDicePress}
-			/>
+			{/* Dado fijo esquina inferior derecha, sin fondo opaco */}
+			<View
+				style={styles.diceSlot}
+				pointerEvents="box-none"
+			>
+				<CentralDice
+					diceUi={diceUi}
+					lastTotal={lastDiceTotal}
+					disabled={state.isFinished}
+					onPress={onDicePress}
+				/>
+			</View>
 		</View>
 	);
 }
 
 const styles = StyleSheet.create({
 	root: { flex: 1, backgroundColor: '#1a1a1e' },
+	field: {
+		...StyleSheet.absoluteFillObject,
+		zIndex: 1,
+	},
 	header: {
-		height: 48,
-		paddingHorizontal: 16,
+		position: 'absolute',
+		top: 0,
+		left: 0,
+		right: 0,
+		zIndex: 30,
+		height: 44,
+		paddingHorizontal: 14,
 		flexDirection: 'row',
 		alignItems: 'center',
 		justifyContent: 'space-between',
-		backgroundColor: '#121216',
-		borderBottomWidth: 1,
-		borderBottomColor: '#2a2a32',
+		backgroundColor: 'transparent',
 	},
-	headerTitle: { color: '#e8e6e3', fontSize: 18, fontWeight: '800' },
+	headerTitle: {
+		color: '#e8e6e3',
+		fontSize: 16,
+		fontWeight: '800',
+		textShadowColor: 'rgba(0,0,0,0.85)',
+		textShadowOffset: { width: 0, height: 1 },
+		textShadowRadius: 3,
+	},
 	headerMeta: {
-		color: '#b8b4ae',
-		fontSize: 13,
+		color: '#c8c4be',
+		fontSize: 12,
 		fontWeight: '600',
-		marginTop: 2,
+		marginTop: 1,
+		textShadowColor: 'rgba(0,0,0,0.85)',
+		textShadowOffset: { width: 0, height: 1 },
+		textShadowRadius: 3,
 	},
 	phasePill: {
-		paddingHorizontal: 14,
-		paddingVertical: 8,
-		borderRadius: 20,
-		backgroundColor: '#2a2a35',
+		paddingHorizontal: 12,
+		paddingVertical: 6,
+		borderRadius: 16,
+		backgroundColor: 'rgba(26,26,30,0.35)',
 		borderWidth: 1,
-		borderColor: '#3a3a45',
+		borderColor: 'rgba(58,58,69,0.5)',
 	},
 	phasePillText: {
 		color: '#f0d78c',
-		fontSize: 14,
+		fontSize: 13,
 		fontWeight: '800',
 	},
-	body: { flex: 1, flexDirection: 'row', minHeight: 0 },
-	cameraClip: { flex: 1, overflow: 'hidden', position: 'relative' },
-	cameraStage: { flex: 1 },
+	leftRail: {
+		position: 'absolute',
+		left: 6,
+		top: 48,
+		bottom: 56,
+		zIndex: 20,
+		justifyContent: 'center',
+		maxWidth: 120,
+	},
+	rightRail: {
+		position: 'absolute',
+		right: 6,
+		top: 48,
+		bottom: 110,
+		zIndex: 20,
+		maxWidth: 150,
+	},
 	logSlot: {
 		position: 'absolute',
 		left: 0,
-		right: 0,
+		right: 100,
 		bottom: 0,
-		paddingRight: 110,
 		zIndex: 25,
+	},
+	diceSlot: {
+		position: 'absolute',
+		right: 8,
+		bottom: 8,
+		zIndex: 40,
 	},
 });

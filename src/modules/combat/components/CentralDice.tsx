@@ -189,12 +189,12 @@ export function CentralDice({ diceUi, lastTotal, disabled, onPress }: Props) {
 
 const styles = StyleSheet.create({
 	root: {
-		width: 100,
-		paddingVertical: 8,
-		paddingHorizontal: 6,
+		width: 96,
+		paddingVertical: 4,
+		paddingHorizontal: 4,
 		borderRadius: 14,
-		borderWidth: 2,
-		backgroundColor: '#16161c',
+		borderWidth: 0,
+		backgroundColor: 'transparent',
 		alignItems: 'center',
 	},
 	pressed: { opacity: 0.88, transform: [{ scale: 0.96 }] },
