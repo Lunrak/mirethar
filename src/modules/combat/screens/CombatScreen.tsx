@@ -229,7 +229,7 @@ export default function CombatScreen({
 const styles = StyleSheet.create({
 	root: { flex: 1, backgroundColor: '#1a1a1e' },
 	field: {
-		...StyleSheet.absoluteFillObject,
+		...StyleSheet.absoluteFill,
 		zIndex: 1,
 	},
 	header: {
