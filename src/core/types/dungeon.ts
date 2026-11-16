@@ -61,6 +61,8 @@ export type GenerateResult = {
   newCellIds: string[];
   /** Mensaje de log de exploración */
   message: string;
+  /** Encuentro generado por la tabla de contenido (si aplica) */
+  pendingEncounter?: import('../rules/EncounterGenerator').EncounterResult | null;
 };
 
 export const DIR_DELTA: Record<Dir, { dx: number; dy: number }> = {
