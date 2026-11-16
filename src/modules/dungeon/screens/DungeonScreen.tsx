@@ -10,9 +10,17 @@ import {
 	movePartyTo,
 	ENTRANCES,
 	doorsFromPartyCell,
+	noteEncounterCleared,
+	acceptPendingQuest,
 } from '../../../core/rules/DungeonGenerator';
 import type { DungeonMap } from '../../../core/types/dungeon';
 import type { EncounterResult } from '../../../core/rules/EncounterGenerator';
+import type { ActiveQuest } from '../../../core/types/quest';
+import {
+	canTurnInQuest,
+	turnInQuest,
+	questProgressLabel,
+} from '../../../core/rules/QuestService';
 
 import { DungeonMapView } from '../components/DungeonMapView';
 
@@ -27,11 +35,13 @@ export default function DungeonScreen({ onBack, onEncounter }: Props) {
 	const [log, setLog] = useState<string[]>([]);
 	const [pendingEncounter, setPendingEncounter] =
 		useState<EncounterResult | null>(null);
+	const [questOffer, setQuestOffer] = useState<ActiveQuest | null>(null);
 
 	const start = (entranceId: number) => {
 		const m = createDungeon(entranceId);
 		setMap(m);
 		setPendingEncounter(null);
+		setQuestOffer(null);
 		setLog([
 			`Entrada ${entranceId}: ${ENTRANCES.find((e) => e.id === entranceId)?.name}`,
 			'Tocad una puerta roja para explorar más allá.',
@@ -44,6 +54,9 @@ export default function DungeonScreen({ onBack, onEncounter }: Props) {
 		setMap(result.map);
 		if (result.pendingEncounter) {
 			setPendingEncounter(result.pendingEncounter);
+		}
+		if (result.pendingQuestOffer) {
+			setQuestOffer(result.pendingQuestOffer);
 		}
 		setLog((prev) => [...prev, result.message].slice(-12));
 	};
@@ -157,6 +170,76 @@ export default function DungeonScreen({ onBack, onEncounter }: Props) {
 						</Text>
 					)}
 
+					{questOffer &&
+						(!map.activeQuest || map.activeQuest.status === 'completed') && (
+							<View style={styles.questBox}>
+								<Text style={styles.sideTitle}>Misión</Text>
+								<Text style={styles.questGiver}>
+									{questOffer.giverName} · {questOffer.giverRole}
+								</Text>
+								<Text style={styles.questTitle}>{questOffer.title}</Text>
+								<Text style={styles.questDialogue}>
+									«{questOffer.dialogue}»
+								</Text>
+								<Text style={styles.muted}>{questOffer.goalText}</Text>
+								<Pressable
+									style={styles.encBtn}
+									onPress={() => {
+										setMap(acceptPendingQuest(map, questOffer));
+										setLog((prev) =>
+											[
+												...prev,
+												`Aceptáis «${questOffer.title}» de ${questOffer.giverName}.`,
+											].slice(-12),
+										);
+										setQuestOffer(null);
+									}}
+								>
+									<Text style={styles.encBtnText}>Aceptar misión</Text>
+								</Pressable>
+								<Pressable
+									onPress={() => setQuestOffer(null)}
+									style={{ marginTop: 6 }}
+								>
+									<Text style={styles.muted}>Rechazar</Text>
+								</Pressable>
+							</View>
+						)}
+
+					{map.activeQuest && map.activeQuest.status !== 'completed' && (
+						<View style={styles.questTrack}>
+							<Text style={styles.sideTitle}>Misión activa</Text>
+							<Text style={styles.questTitle}>{map.activeQuest.title}</Text>
+							<Text style={styles.questGiver}>
+								{map.activeQuest.giverName} · progreso{' '}
+								{questProgressLabel(map.activeQuest)}
+							</Text>
+							<Text style={styles.muted}>{map.activeQuest.goalText}</Text>
+							{map.activeQuest.status === 'ready_to_turn_in' && (
+								<Text style={styles.readyText}>
+									Objetivo cumplido — volved al cuarto de{' '}
+									{map.activeQuest.giverName}
+								</Text>
+							)}
+							{canTurnInQuest(map, map.activeQuest) && (
+								<Pressable
+									style={styles.encBtn}
+									onPress={() => {
+										const { quest, reward } = turnInQuest(map.activeQuest!);
+										setMap({
+											...map,
+											activeQuest: quest,
+											goldFound: (map.goldFound ?? 0) + reward.gold,
+										});
+										setLog((prev) => [...prev, reward.message].slice(-12));
+									}}
+								>
+									<Text style={styles.encBtnText}>Entregar misión</Text>
+								</Pressable>
+							)}
+						</View>
+					)}
+
 					{pendingEncounter && (
 						<View style={styles.encBox}>
 							<Text style={styles.sideTitle}>¡Encuentro!</Text>
@@ -175,6 +258,21 @@ export default function DungeonScreen({ onBack, onEncounter }: Props) {
 								}}
 							>
 								<Text style={styles.encBtnText}>Preparar combate</Text>
+							</Pressable>
+							<Pressable
+								style={[
+									styles.encBtn,
+									{ marginTop: 6, borderColor: '#5dce7a' },
+								]}
+								onPress={() => {
+									setMap(noteEncounterCleared(map));
+									setPendingEncounter(null);
+									setLog((prev) =>
+										[...prev, 'Encuentro resuelto (victoria).'].slice(-12),
+									);
+								}}
+							>
+								<Text style={styles.encBtnText}>Marcar victoria</Text>
 							</Pressable>
 						</View>
 					)}
@@ -288,4 +386,35 @@ const styles = StyleSheet.create({
 		alignItems: 'center',
 	},
 	encBtnText: { color: '#f0d78c', fontWeight: '800' },
+	questBox: {
+		padding: 10,
+		borderRadius: 10,
+		backgroundColor: '#2a2830',
+		borderWidth: 1,
+		borderColor: '#c9a227',
+		marginBottom: 8,
+	},
+	questTrack: {
+		padding: 10,
+		borderRadius: 10,
+		backgroundColor: '#22222a',
+		borderWidth: 1,
+		borderColor: '#3a3a45',
+		marginBottom: 8,
+	},
+	questGiver: { color: '#9a9690', fontSize: 12, marginBottom: 4 },
+	questTitle: { color: '#f0d78c', fontSize: 14, fontWeight: '800' },
+	questDialogue: {
+		color: '#e8e6e3',
+		fontSize: 12,
+		lineHeight: 17,
+		marginVertical: 6,
+		fontStyle: 'italic',
+	},
+	readyText: {
+		color: '#5dce7a',
+		fontSize: 12,
+		fontWeight: '700',
+		marginTop: 4,
+	},
 });
