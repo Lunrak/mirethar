@@ -12,13 +12,14 @@ import {
 	doorsFromPartyCell,
 	noteEncounterCleared,
 	acceptPendingQuest,
+	turnInQuestOnMap,
 } from '../../../core/rules/DungeonGenerator';
 import type { DungeonMap } from '../../../core/types/dungeon';
 import type { EncounterResult } from '../../../core/rules/EncounterGenerator';
 import type { ActiveQuest } from '../../../core/types/quest';
 import {
-	canTurnInQuest,
-	turnInQuest,
+	getQuests,
+	questsReadyHere,
 	questProgressLabel,
 } from '../../../core/rules/QuestService';
 
@@ -170,75 +171,110 @@ export default function DungeonScreen({ onBack, onEncounter }: Props) {
 						</Text>
 					)}
 
-					{questOffer &&
-						(!map.activeQuest || map.activeQuest.status === 'completed') && (
-							<View style={styles.questBox}>
-								<Text style={styles.sideTitle}>Misión</Text>
-								<Text style={styles.questGiver}>
-									{questOffer.giverName} · {questOffer.giverRole}
-								</Text>
-								<Text style={styles.questTitle}>{questOffer.title}</Text>
-								<Text style={styles.questDialogue}>
-									«{questOffer.dialogue}»
-								</Text>
-								<Text style={styles.muted}>{questOffer.goalText}</Text>
-								<Pressable
-									style={styles.encBtn}
-									onPress={() => {
-										setMap(acceptPendingQuest(map, questOffer));
-										setLog((prev) =>
-											[
-												...prev,
-												`Aceptáis «${questOffer.title}» de ${questOffer.giverName}.`,
-											].slice(-12),
-										);
-										setQuestOffer(null);
-									}}
-								>
-									<Text style={styles.encBtnText}>Aceptar misión</Text>
-								</Pressable>
-								<Pressable
-									onPress={() => setQuestOffer(null)}
-									style={{ marginTop: 6 }}
-								>
-									<Text style={styles.muted}>Rechazar</Text>
-								</Pressable>
-							</View>
-						)}
-
-					{map.activeQuest && map.activeQuest.status !== 'completed' && (
-						<View style={styles.questTrack}>
-							<Text style={styles.sideTitle}>Misión activa</Text>
-							<Text style={styles.questTitle}>{map.activeQuest.title}</Text>
+					{questOffer && (
+						<View style={styles.questBox}>
+							<Text style={styles.sideTitle}>Misión</Text>
 							<Text style={styles.questGiver}>
-								{map.activeQuest.giverName} · progreso{' '}
-								{questProgressLabel(map.activeQuest)}
+								{questOffer.giverName} · {questOffer.giverRole}
 							</Text>
-							<Text style={styles.muted}>{map.activeQuest.goalText}</Text>
-							{map.activeQuest.status === 'ready_to_turn_in' && (
-								<Text style={styles.readyText}>
-									Objetivo cumplido — volved al cuarto de{' '}
-									{map.activeQuest.giverName}
-								</Text>
-							)}
-							{canTurnInQuest(map, map.activeQuest) && (
-								<Pressable
-									style={styles.encBtn}
-									onPress={() => {
-										const { quest, reward } = turnInQuest(map.activeQuest!);
-										setMap({
-											...map,
-											activeQuest: quest,
-											goldFound: (map.goldFound ?? 0) + reward.gold,
-										});
-										setLog((prev) => [...prev, reward.message].slice(-12));
-									}}
-								>
-									<Text style={styles.encBtnText}>Entregar misión</Text>
-								</Pressable>
-							)}
+							<Text style={styles.questTitle}>{questOffer.title}</Text>
+							<Text style={styles.questDialogue}>«{questOffer.dialogue}»</Text>
+							<Text style={styles.muted}>{questOffer.goalText}</Text>
+							<Pressable
+								style={styles.encBtn}
+								onPress={() => {
+									setMap(acceptPendingQuest(map, questOffer));
+									setLog((prev) =>
+										[
+											...prev,
+											`Aceptáis «${questOffer.title}» de ${questOffer.giverName}.`,
+										].slice(-12),
+									);
+									setQuestOffer(null);
+								}}
+							>
+								<Text style={styles.encBtnText}>Aceptar misión</Text>
+							</Pressable>
+							<Pressable
+								onPress={() => setQuestOffer(null)}
+								style={{ marginTop: 6 }}
+							>
+								<Text style={styles.muted}>Rechazar</Text>
+							</Pressable>
 						</View>
 					)}
+
+					{getQuests(map).filter((q) => q.status !== 'completed').length >
+						0 && (
+						<View style={styles.questTrack}>
+							<Text style={styles.sideTitle}>
+								Misiones (
+								{getQuests(map).filter((q) => q.status !== 'completed').length})
+							</Text>
+							{getQuests(map)
+								.filter((q) => q.status !== 'completed')
+								.map((q) => (
+									<View
+										key={q.instanceId}
+										style={styles.questItem}
+									>
+										<Text style={styles.questTitle}>{q.title}</Text>
+										<Text style={styles.questGiver}>
+											{q.giverName} · {questProgressLabel(q)} · sala{' '}
+											{q.giverCellId}
+										</Text>
+										<Text style={styles.muted}>{q.goalText}</Text>
+										{q.status === 'ready_to_turn_in' &&
+											map.partyCellId !== q.giverCellId && (
+												<Text style={styles.readyText}>
+													Listo — volved a {q.giverCellId} ({q.giverName})
+												</Text>
+											)}
+										{q.status === 'ready_to_turn_in' &&
+											map.partyCellId === q.giverCellId && (
+												<Pressable
+													style={styles.encBtn}
+													onPress={() => {
+														const { map: next, message } = turnInQuestOnMap(
+															map,
+															q.instanceId,
+														);
+														setMap(next);
+														setLog((prev) => [...prev, message].slice(-12));
+													}}
+												>
+													<Text style={styles.encBtnText}>
+														Entregar · +{q.reward.gold} gp
+													</Text>
+												</Pressable>
+											)}
+									</View>
+								))}
+						</View>
+					)}
+
+					{map.goldFound || map.lootItems?.length ? (
+						<View style={styles.lootBox}>
+							<Text style={styles.sideTitle}>Botín de misiones</Text>
+							<Text style={styles.encText}>{map.goldFound ?? 0} gp</Text>
+							{(map.lootItems ?? []).map((it) => (
+								<Text
+									key={it}
+									style={styles.muted}
+								>
+									· {it}
+								</Text>
+							))}
+							{(map.xpMarks ?? []).map((xp) => (
+								<Text
+									key={xp}
+									style={styles.muted}
+								>
+									· {xp}
+								</Text>
+							))}
+						</View>
+					) : null}
 
 					{pendingEncounter && (
 						<View style={styles.encBox}>
@@ -416,5 +452,19 @@ const styles = StyleSheet.create({
 		fontSize: 12,
 		fontWeight: '700',
 		marginTop: 4,
+	},
+	questItem: {
+		marginBottom: 10,
+		paddingBottom: 8,
+		borderBottomWidth: StyleSheet.hairlineWidth,
+		borderBottomColor: '#3a3a45',
+	},
+	lootBox: {
+		padding: 10,
+		borderRadius: 10,
+		backgroundColor: '#1e2a22',
+		borderWidth: 1,
+		borderColor: '#3d8b5f',
+		marginBottom: 8,
 	},
 });

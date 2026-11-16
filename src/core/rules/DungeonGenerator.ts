@@ -28,7 +28,10 @@ import type { ResolvedContent } from './RoomContentsService';
 import {
   shouldOfferQuest,
   rollAndAcceptQuest,
-  advanceQuest,
+  advanceAllQuests,
+  getQuests,
+  turnInQuest,
+  applyLootToMap,
 } from './QuestService';
 
 
@@ -237,7 +240,7 @@ export function openDoor(
   const contentLogs: string[] = [];
   let pendingEncounter: ResolvedContent | null = null;
   let pendingQuestOffer: import('../types/quest').ActiveQuest | null = null;
-  let quest = map.activeQuest ?? null;
+  let quests = getQuests(map);
 
   for (const off of shape.offsets) {
     const { x, y } = worldPos(originX, originY, off.x, off.y);
@@ -262,22 +265,19 @@ export function openDoor(
       contentLogs.push(formatContentLog(resolved));
       if (resolved.encounter) pendingEncounter = resolved;
 
-      const hasQuest = !!quest && quest.status !== 'completed';
-      if (shouldOfferQuest(off.kind, resolved.kind, hasQuest, rng)) {
+      if (shouldOfferQuest(off.kind, resolved.kind, quests, id, rng)) {
         pendingQuestOffer = rollAndAcceptQuest(id, rng);
         contentLogs.push(
           `PNJ ${pendingQuestOffer.giverName} ofrece: «${pendingQuestOffer.title}»`,
         );
       }
 
-      // Progreso: salas exploradas / tesoros
-      if (off.kind === 'room' && resolved.kind !== 'empty') {
-        quest = advanceQuest(quest, 'explore_rooms');
-      } else if (off.kind === 'room') {
-        quest = advanceQuest(quest, 'explore_rooms');
+      // Progreso en todas las misiones activas
+      if (off.kind === 'room') {
+        quests = advanceAllQuests(quests, 'explore_rooms');
       }
       if (resolved.kind === 'treasure') {
-        quest = advanceQuest(quest, 'find_treasure');
+        quests = advanceAllQuests(quests, 'find_treasure');
       }
     } else {
       cell = { ...cell, content: 'empty', label: shape.label };
@@ -287,7 +287,7 @@ export function openDoor(
   }
 
   // Abrir puerta cuenta para misiones de cartografiar
-  quest = advanceQuest(quest, 'open_doors');
+  quests = advanceAllQuests(quests, 'open_doors');
 
   const firstId = cellKey(originX, originY);
   // Marcar puerta como abierta y conectada
@@ -326,16 +326,17 @@ export function openDoor(
     cells,
     doors,
     partyCellId: cells[firstId]?.id ?? map.partyCellId,
-    activeQuest: quest,
+    quests,
+    activeQuest: quests.find((q) => q.status !== 'completed') ?? null,
   };
 
   const contentMsg = contentLogs.length
     ? ` Contenido: ${contentLogs.join(' | ')}`
     : '';
-  const questMsg =
-    quest && quest.status === 'ready_to_turn_in'
-      ? '  Misión lista: volved al cuarto del dador.'
-      : '';
+  const ready = quests.filter((q) => q.status === 'ready_to_turn_in');
+  const questMsg = ready.length
+    ? `  ${ready.length} misión(es) lista(s): volved al cuarto del dador.`
+    : '';
 
   return {
     map: next,
@@ -361,14 +362,62 @@ export { ENTRANCES };
 
 /** Llamar tras ganar un combate para progreso de quest */
 export function noteEncounterCleared(map: DungeonMap): DungeonMap {
-  const q = advanceQuest(map.activeQuest, 'clear_encounters');
-  return { ...map, activeQuest: q };
+  const quests = advanceAllQuests(getQuests(map), 'clear_encounters');
+  return {
+    ...map,
+    quests,
+    activeQuest: quests.find((q) => q.status !== 'completed') ?? null,
+  };
 }
 
-/** Aceptar la oferta de misión (la ancla al mapa) */
+/** Aceptar la oferta: se añade a la lista (permite varias / repetidas) */
 export function acceptPendingQuest(
   map: DungeonMap,
   offer: import('../types/quest').ActiveQuest,
 ): DungeonMap {
-  return { ...map, activeQuest: { ...offer, status: 'active', progress: 0 } };
+  const accepted = {
+    ...offer,
+    status: 'active' as const,
+    progress: 0,
+  };
+  const quests = [...getQuests(map), accepted];
+  return {
+    ...map,
+    quests,
+    activeQuest: accepted,
+  };
+}
+
+/** Entregar una misión concreta en el cuarto donde se recibió */
+export function turnInQuestOnMap(
+  map: DungeonMap,
+  instanceId: string,
+): { map: DungeonMap; message: string } {
+  const list = getQuests(map);
+  const idx = list.findIndex((q) => q.instanceId === instanceId);
+  if (idx < 0) return { map, message: 'Misión no encontrada.' };
+  const q = list[idx];
+  if (q.status !== 'ready_to_turn_in' || map.partyCellId !== q.giverCellId) {
+    return {
+      map,
+      message:
+        'Debéis completar el objetivo y volver al cuarto donde os la dieron.',
+    };
+  }
+  const currentLoot = {
+    gold: map.goldFound ?? 0,
+    items: map.lootItems ?? [],
+    xpMarks: map.xpMarks ?? [],
+  };
+  const { quest, reward } = turnInQuest(q, currentLoot);
+  const quests = list.map((x, i) => (i === idx ? quest : x));
+  const next = applyLootToMap(
+    {
+      ...map,
+      quests,
+      activeQuest: quests.find((x) => x.status !== 'completed') ?? null,
+    },
+    reward.loot,
+  );
+  return { map: next, message: reward.message };
 }
