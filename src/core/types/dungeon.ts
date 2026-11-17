@@ -4,6 +4,10 @@
 
 export type Dir = 'N' | 'E' | 'S' | 'W';
 
+/** Hoja de mapeo fija (cuadrados) */
+export const MAP_WIDTH = 28;
+export const MAP_HEIGHT = 20;
+
 export type CellKind = 'entrance' | 'corridor' | 'room';
 
 /** Qué hay en la celda (contenido jugable; se rellena al revelar) */
@@ -16,7 +20,7 @@ export type CellContent =
   | 'trap'
   | 'unknown';
 
-export type DoorState = 'open' | 'closed' | 'secret' | 'locked';
+export type DoorState = 'open' | 'closed' | 'secret' | 'locked' | 'blocked';
 
 export type Door = {
   id: string;
@@ -93,4 +97,14 @@ export const OPPOSITE: Record<Dir, Dir> = {
 
 export function cellKey(x: number, y: number): string {
   return `${x},${y}`;
+}
+
+/** ¿(x,y) dentro de la hoja 28×20? */
+export function inBounds(x: number, y: number): boolean {
+  return x >= 0 && x < MAP_WIDTH && y >= 0 && y < MAP_HEIGHT;
+}
+
+/** Centro inferior: columna central, fila inferior (entrada) */
+export function entranceAnchor(): { x: number; y: number } {
+  return { x: Math.floor(MAP_WIDTH / 2), y: MAP_HEIGHT - 1 };
 }
