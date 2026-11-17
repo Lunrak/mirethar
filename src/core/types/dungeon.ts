@@ -45,6 +45,11 @@ export type MapCell = {
   isEntrance?: boolean;
   /** Etiqueta corta para UI */
   label?: string;
+  /**
+   * Acuerdo / botín de monstruos en esta casilla:
+   * sobornos acumulados se recuperan al derrotarlos.
+   */
+  monsterDeal?: import('./stash').CellMonsterDeal;
 };
 
 export type DungeonMap = {

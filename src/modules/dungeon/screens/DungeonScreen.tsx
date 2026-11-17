@@ -22,6 +22,12 @@ import {
 	questsReadyHere,
 	questProgressLabel,
 } from '../../../core/rules/QuestService';
+import {
+	payBribe,
+	claimRoomAfterVictory,
+	bribeDemandText,
+	ensureMonsterDeal,
+} from '../../../core/rules/BribeService';
 
 import { DungeonMapView } from '../components/DungeonMapView';
 
@@ -56,6 +62,13 @@ export default function DungeonScreen({ onBack, onEncounter }: Props) {
 		const result = openDoor(map, doorId);
 		setMap(result.map);
 		if (result.pendingEncounter) {
+			const label = `${result.pendingEncounter.template.name} ×${result.pendingEncounter.quantity}`;
+			const withDeal = ensureMonsterDeal(
+				result.map,
+				result.map.partyCellId,
+				label,
+			);
+			setMap(withDeal);
 			setPendingEncounter(result.pendingEncounter);
 			setPendingAmbush(!!result.ambushEncounter);
 		}
@@ -70,8 +83,34 @@ export default function DungeonScreen({ onBack, onEncounter }: Props) {
 		const result = movePartyTo(map, cellId);
 		setMap(result.map);
 		if (result.ambush) {
+			const label = `${result.ambush.template.name} ×${result.ambush.quantity}`;
+			const withDeal = ensureMonsterDeal(
+				result.map,
+				result.map.partyCellId,
+				label,
+			);
+			setMap(withDeal);
 			setPendingEncounter(result.ambush);
 			setPendingAmbush(true);
+		} else {
+			// Al entrar en casilla sobornada sin emboscada: actualizar demanda
+			const deal = result.map.cells[result.map.partyCellId]?.monsterDeal;
+			if (deal?.bribed) {
+				const withDeal = ensureMonsterDeal(
+					result.map,
+					result.map.partyCellId,
+					deal.label,
+				);
+				setMap(withDeal);
+				setLog((prev) =>
+					[
+						...prev,
+						bribeDemandText(
+							withDeal.cells[result.map.partyCellId]!.monsterDeal!,
+						),
+					].slice(-12),
+				);
+			}
 		}
 		if (result.message) {
 			setLog((prev) => [...prev, result.message].slice(-12));
@@ -303,6 +342,11 @@ export default function DungeonScreen({ onBack, onEncounter }: Props) {
 									marcha
 								</Text>
 							)}
+							{map.cells[map.partyCellId]?.monsterDeal && (
+								<Text style={styles.muted}>
+									{bribeDemandText(map.cells[map.partyCellId]!.monsterDeal!)}
+								</Text>
+							)}
 							<Pressable
 								style={styles.encBtn}
 								onPress={() => {
@@ -315,16 +359,51 @@ export default function DungeonScreen({ onBack, onEncounter }: Props) {
 									{pendingAmbush ? '¡Emboscada! Combatir' : 'Preparar combate'}
 								</Text>
 							</Pressable>
+							{map.cells[map.partyCellId]?.monsterDeal && (
+								<Pressable
+									style={[
+										styles.encBtn,
+										{ marginTop: 6, borderColor: '#6ea8fe' },
+									]}
+									onPress={() => {
+										const r = payBribe(map, map.partyCellId);
+										setMap(r.map);
+										setLog((prev) => [...prev, r.message].slice(-12));
+										if (r.ok) {
+											setPendingEncounter(null);
+											setPendingAmbush(false);
+										}
+									}}
+								>
+									<Text style={styles.encBtnText}>
+										Sobornar (
+										{map.cells[map.partyCellId]?.monsterDeal?.nextBribeGold ??
+											'?'}{' '}
+										gp)
+									</Text>
+								</Pressable>
+							)}
 							<Pressable
 								style={[
 									styles.encBtn,
 									{ marginTop: 6, borderColor: '#5dce7a' },
 								]}
 								onPress={() => {
-									setMap(noteEncounterCleared(map));
+									// Victoria: recuperar stash + loot normal simple (d6×5)
+									const normalGold = Math.floor(Math.random() * 6 + 1) * 5;
+									let next = noteEncounterCleared(map);
+									const claim = claimRoomAfterVictory(next, next.partyCellId, {
+										gold: normalGold,
+									});
+									setMap(claim.map);
 									setPendingEncounter(null);
+									setPendingAmbush(false);
 									setLog((prev) =>
-										[...prev, 'Encuentro resuelto (victoria).'].slice(-12),
+										[
+											...prev,
+											'Encuentro resuelto (victoria).',
+											claim.message,
+										].slice(-12),
 									);
 								}}
 							>

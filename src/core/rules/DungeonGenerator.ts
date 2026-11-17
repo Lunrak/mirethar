@@ -23,6 +23,8 @@ import {
 } from '../types/dungeon';
 import { rollD6 } from './DiceService';
 import { generateEncounter, type EncounterResult } from './EncounterGenerator';
+import { ensureMonsterDeal } from './BribeService';
+
 
 import {
   resolveCellContent,
@@ -554,4 +556,15 @@ export function turnInQuestOnMap(
     reward.loot,
   );
   return { map: next, message: reward.message };
+}
+
+
+/** Asocia demanda de soborno a la casilla del encuentro */
+export function attachEncounterDeal(
+  map: DungeonMap,
+  cellId: string,
+  encounterLabel: string,
+  rng?: () => number,
+): DungeonMap {
+  return ensureMonsterDeal(map, cellId, encounterLabel, rng);
 }
