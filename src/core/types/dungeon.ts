@@ -79,6 +79,8 @@ export type GenerateResult = {
   pendingEncounter?: import('../rules/EncounterGenerator').EncounterResult | null;
   /** PNJ ofrece misión en la celda recién revelada */
   pendingQuestOffer?: import('./quest').ActiveQuest | null;
+  /** true si el encuentro pendiente es emboscada al revisitar */
+  ambushEncounter?: boolean;
 };
 
 export const DIR_DELTA: Record<Dir, { dx: number; dy: number }> = {

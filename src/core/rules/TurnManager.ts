@@ -402,8 +402,24 @@ export function runEnemyTurn(
     ...state.positions.front,
     ...state.positions.rear.filter((id) => !state.positions.front.includes(id)),
   ];
+  // Emboscada al revisitar: solo los 2 primeros del orden de marcha (frente)
+  const frontOnly = state.ambushFrontOnly
+    ? (state.positions.front.length
+        ? state.positions.front.slice(0, 2)
+        : marchOrder.slice(0, 2))
+    : null;
   const targetOrder =
-    marchOrder.length > 0 ? marchOrder : heroes.map((h) => h.id);
+    frontOnly && frontOnly.length > 0
+      ? frontOnly
+      : marchOrder.length > 0
+        ? marchOrder
+        : heroes.map((h) => h.id);
+
+  if (state.ambushFrontOnly) {
+    logEntries.push(
+      log('Emboscada: los enemigos solo atacan a los 2 primeros del orden de marcha.'),
+    );
+  }
 
   let targetCursor = 0;
 

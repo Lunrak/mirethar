@@ -27,8 +27,8 @@ import { DungeonMapView } from '../components/DungeonMapView';
 
 type Props = {
 	onBack?: () => void;
-	/** Más adelante: ir a combate desde una sala */
-	onEncounter?: (map: DungeonMap) => void;
+	/** Ir a combate; ambush = enemigos primero, solo frente */
+	onEncounter?: (map: DungeonMap, opts?: { ambush?: boolean }) => void;
 };
 
 export default function DungeonScreen({ onBack, onEncounter }: Props) {
@@ -36,12 +36,14 @@ export default function DungeonScreen({ onBack, onEncounter }: Props) {
 	const [log, setLog] = useState<string[]>([]);
 	const [pendingEncounter, setPendingEncounter] =
 		useState<EncounterResult | null>(null);
+	const [pendingAmbush, setPendingAmbush] = useState(false);
 	const [questOffer, setQuestOffer] = useState<ActiveQuest | null>(null);
 
 	const start = (entranceId: number) => {
 		const m = createDungeon(entranceId);
 		setMap(m);
 		setPendingEncounter(null);
+		setPendingAmbush(false);
 		setQuestOffer(null);
 		setLog([
 			`Entrada ${entranceId}: ${ENTRANCES.find((e) => e.id === entranceId)?.name}`,
@@ -55,6 +57,7 @@ export default function DungeonScreen({ onBack, onEncounter }: Props) {
 		setMap(result.map);
 		if (result.pendingEncounter) {
 			setPendingEncounter(result.pendingEncounter);
+			setPendingAmbush(!!result.ambushEncounter);
 		}
 		if (result.pendingQuestOffer) {
 			setQuestOffer(result.pendingQuestOffer);
@@ -64,7 +67,15 @@ export default function DungeonScreen({ onBack, onEncounter }: Props) {
 
 	const handleSelectCell = (cellId: string) => {
 		if (!map) return;
-		setMap(movePartyTo(map, cellId));
+		const result = movePartyTo(map, cellId);
+		setMap(result.map);
+		if (result.ambush) {
+			setPendingEncounter(result.ambush);
+			setPendingAmbush(true);
+		}
+		if (result.message) {
+			setLog((prev) => [...prev, result.message].slice(-12));
+		}
 	};
 
 	if (!map) {
@@ -286,14 +297,23 @@ export default function DungeonScreen({ onBack, onEncounter }: Props) {
 								Tipo: {pendingEncounter.type} (tabla #
 								{pendingEncounter.tableRoll})
 							</Text>
+							{pendingAmbush && (
+								<Text style={styles.readyText}>
+									Emboscada: enemigos primero · solo 2 primeros del orden de
+									marcha
+								</Text>
+							)}
 							<Pressable
 								style={styles.encBtn}
 								onPress={() => {
-									onEncounter?.(map);
+									onEncounter?.(map, { ambush: pendingAmbush });
 									setPendingEncounter(null);
+									setPendingAmbush(false);
 								}}
 							>
-								<Text style={styles.encBtnText}>Preparar combate</Text>
+								<Text style={styles.encBtnText}>
+									{pendingAmbush ? '¡Emboscada! Combatir' : 'Preparar combate'}
+								</Text>
 							</Pressable>
 							<Pressable
 								style={[

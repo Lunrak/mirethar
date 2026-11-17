@@ -153,10 +153,11 @@ describe('openDoor', () => {
       (c) => c.id !== map.partyCellId,
     );
     if (!other) return;
-    const moved = movePartyTo(map, other.id);
-    expect(moved.partyCellId).toBe(other.id);
+    const moved = movePartyTo(map, other.id, seqRng([6]));
+    expect(moved.map.partyCellId).toBe(other.id);
+    expect(moved.revisited).toBe(true);
     const blocked = movePartyTo(map, '99,99');
-    expect(blocked.partyCellId).toBe(map.partyCellId);
+    expect(blocked.map.partyCellId).toBe(map.partyCellId);
   });
 
   test('doorsFromPartyCell lista puertas de la casilla actual', () => {
@@ -278,7 +279,7 @@ describe('Quests integradas en dungeon', () => {
         progress: q.target,
       })),
     };
-    if (other) map = movePartyTo(map, other.id);
+    if (other) map = movePartyTo(map, other.id, seqRng([6])).map;
     if (map.partyCellId === map.quests![0].giverCellId) {
       // mapa de una sola celda útil — skip
       return;
@@ -289,5 +290,27 @@ describe('Quests integradas en dungeon', () => {
     );
     expect(same.quests![0].status).toBe('ready_to_turn_in');
     expect(message).toMatch(/cuarto|objetivo/i);
+  });
+});
+
+describe('Revisita y emboscada', () => {
+  test('d6=1 genera emboscada de minions', () => {
+    const map = createDungeon(1);
+    const other = Object.values(map.cells).find((c) => c.id !== map.partyCellId);
+    if (!other) return;
+    const result = movePartyTo(map, other.id, seqRng([1, 1, 1, 1]));
+    expect(result.revisited).toBe(true);
+    expect(result.ambush).not.toBeNull();
+    expect(result.ambush!.type).toBe('minion');
+    expect(result.message).toMatch(/Emboscada|d6=1/i);
+  });
+
+  test('d6≠1 no genera emboscada', () => {
+    const map = createDungeon(1);
+    const other = Object.values(map.cells).find((c) => c.id !== map.partyCellId);
+    if (!other) return;
+    const result = movePartyTo(map, other.id, seqRng([3]));
+    expect(result.ambush).toBeNull();
+    expect(result.message).toMatch(/sin encuentro/i);
   });
 });

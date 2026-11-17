@@ -109,4 +109,8 @@ export type CombatState = {
 	heroTurnOrder: string[];
 	/** Índice del héroe actual dentro de heroTurnOrder */
 	heroTurnIndex: number;
+	/** Emboscada al revisitar: enemigos actúan primero */
+	ambush?: boolean;
+	/** Solo los 2 primeros del orden de marcha pueden ser objetivo enemigo */
+	ambushFrontOnly?: boolean;
 };
