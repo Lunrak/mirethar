@@ -204,7 +204,6 @@ export function CombatFeedback({
 								size={SPRITE}
 								bare
 								flipX
-								killed={targetDead}
 							/>
 						) : (
 							<View style={styles.placeholder} />
@@ -238,13 +237,21 @@ export function CombatFeedback({
 
 const styles = StyleSheet.create({
 	root: {
-		...StyleSheet.absoluteFillObject,
+		position: 'absolute',
+		top: 0,
+		left: 0,
+		right: 0,
+		bottom: 0,
 		zIndex: 80,
 		justifyContent: 'center',
 		alignItems: 'center',
 	},
 	backdrop: {
-		...StyleSheet.absoluteFillObject,
+		position: 'absolute',
+		top: 0,
+		left: 0,
+		right: 0,
+		bottom: 0,
 		backgroundColor: 'rgba(4, 6, 10, 0.88)',
 	},
 	stage: {
