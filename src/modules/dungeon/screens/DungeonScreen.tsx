@@ -33,13 +33,27 @@ import { DungeonMapView } from '../components/DungeonMapView';
 
 type Props = {
 	onBack?: () => void;
-	/** Ir a combate; ambush = enemigos primero, solo frente */
-	onEncounter?: (map: DungeonMap, opts?: { ambush?: boolean }) => void;
+	/** Mapa persistido al volver del combate */
+	initialMap?: DungeonMap | null;
+	/** Log al volver del combate */
+	resumeLog?: string[];
+	/** Ir a combate con el encuentro actual */
+	onEncounter?: (payload: {
+		map: DungeonMap;
+		encounter: EncounterResult;
+		ambush?: boolean;
+		log?: string[];
+	}) => void;
 };
 
-export default function DungeonScreen({ onBack, onEncounter }: Props) {
-	const [map, setMap] = useState<DungeonMap | null>(null);
-	const [log, setLog] = useState<string[]>([]);
+export default function DungeonScreen({
+	onBack,
+	onEncounter,
+	initialMap = null,
+	resumeLog,
+}: Props) {
+	const [map, setMap] = useState<DungeonMap | null>(initialMap);
+	const [log, setLog] = useState<string[]>(resumeLog ?? []);
 	const [pendingEncounter, setPendingEncounter] =
 		useState<EncounterResult | null>(null);
 	const [pendingAmbush, setPendingAmbush] = useState(false);
@@ -350,7 +364,13 @@ export default function DungeonScreen({ onBack, onEncounter }: Props) {
 							<Pressable
 								style={styles.encBtn}
 								onPress={() => {
-									onEncounter?.(map, { ambush: pendingAmbush });
+									if (!pendingEncounter) return;
+									onEncounter?.({
+										map,
+										encounter: pendingEncounter,
+										ambush: pendingAmbush,
+										log,
+									});
 									setPendingEncounter(null);
 									setPendingAmbush(false);
 								}}
