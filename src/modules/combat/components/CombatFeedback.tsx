@@ -1,10 +1,16 @@
 /**
- * Feedback visual de resolución – Día 18 + pulido Día 24
- * Nunca ambiguo: headline grande, detalle legible, color por tipo.
+ * Overlay cinematográfico de resolución (estilo captura):
+ * - Oscurece el resto
+ * - Arriba: "NOMBRE USES"
+ * - Centro: actor (attack) + objetivo (defend/hit) con sprites
+ * - Números flotantes de daño/cura
+ * - Abajo: nombre de la acción
  */
 
 import React, { useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, Animated, Easing } from 'react-native';
+import type { Hero, EnemyInstance } from '../../../core/types/combat';
+import { HeroSprite, EnemySprite } from './UnitVisuals';
 
 export type FeedbackKind = 'damage' | 'heal' | 'miss' | 'info' | 'critical';
 
@@ -16,196 +22,214 @@ export type CombatFeedbackData = {
 	detail?: string;
 	actorId?: string | null;
 	targetId?: string | null;
+	/** Nombre del actor (para el título) */
+	actorName?: string;
+	/** Nombre de la acción (Attack, Fireball…) */
+	actionName?: string;
 };
 
 type Props = {
 	feedback: CombatFeedbackData | null;
+	heroes?: Hero[];
+	enemies?: EnemyInstance[];
 	onDone?: () => void;
 };
 
-const KIND_LABEL: Record<FeedbackKind, string> = {
-	damage: 'IMPACTO',
-	heal: 'CURACIÓN',
-	miss: 'FALLO',
-	info: 'INFO',
-	critical: 'CRÍTICO',
-};
+const SPRITE = 120;
 
-export function CombatFeedback({ feedback, onDone }: Props) {
+export function CombatFeedback({
+	feedback,
+	heroes = [],
+	enemies = [],
+	onDone,
+}: Props) {
 	const opacity = useRef(new Animated.Value(0)).current;
-	const rise = useRef(new Animated.Value(0)).current;
-	const scale = useRef(new Animated.Value(0.7)).current;
-	const flash = useRef(new Animated.Value(0)).current;
+	const scale = useRef(new Animated.Value(0.85)).current;
+	const numY = useRef(new Animated.Value(0)).current;
+	const numScale = useRef(new Animated.Value(0.5)).current;
 
 	useEffect(() => {
 		if (!feedback) {
 			opacity.setValue(0);
-			rise.setValue(0);
-			scale.setValue(0.7);
-			flash.setValue(0);
+			scale.setValue(0.85);
+			numY.setValue(0);
+			numScale.setValue(0.5);
 			return;
 		}
 
 		opacity.setValue(0);
-		rise.setValue(0);
-		scale.setValue(0.7);
-		flash.setValue(0);
+		scale.setValue(0.85);
+		numY.setValue(12);
+		numScale.setValue(0.5);
 
-		// Secuencia ~1.05 s: entrada 0.15 → hold 0.55 → salida 0.35
+		// ~1.35 s total (coincide con RESULT_AUTO_ACK)
 		const anim = Animated.sequence([
 			Animated.parallel([
 				Animated.timing(opacity, {
 					toValue: 1,
-					duration: 150,
+					duration: 180,
 					easing: Easing.out(Easing.cubic),
 					useNativeDriver: true,
 				}),
 				Animated.spring(scale, {
 					toValue: 1,
-					friction: 6,
-					tension: 120,
+					friction: 7,
+					tension: 100,
 					useNativeDriver: true,
 				}),
-				Animated.sequence([
-					Animated.timing(flash, {
-						toValue: 1,
-						duration: 80,
+				Animated.parallel([
+					Animated.timing(numY, {
+						toValue: -28,
+						duration: 700,
+						easing: Easing.out(Easing.cubic),
 						useNativeDriver: true,
 					}),
-					Animated.timing(flash, {
-						toValue: 0,
-						duration: 220,
+					Animated.spring(numScale, {
+						toValue: 1,
+						friction: 5,
+						tension: 90,
 						useNativeDriver: true,
 					}),
 				]),
-				Animated.timing(rise, {
-					toValue: 1,
-					duration: 700,
-					easing: Easing.out(Easing.cubic),
-					useNativeDriver: true,
-				}),
 			]),
-			Animated.delay(280),
-			Animated.parallel([
-				Animated.timing(opacity, {
-					toValue: 0,
-					duration: 320,
-					easing: Easing.in(Easing.cubic),
-					useNativeDriver: true,
-				}),
-				Animated.timing(scale, {
-					toValue: 0.92,
-					duration: 320,
-					useNativeDriver: true,
-				}),
-			]),
+			Animated.delay(520),
+			Animated.timing(opacity, {
+				toValue: 0,
+				duration: 280,
+				easing: Easing.in(Easing.cubic),
+				useNativeDriver: true,
+			}),
 		]);
 
 		anim.start(({ finished }) => {
 			if (finished) onDone?.();
 		});
-
 		return () => anim.stop();
-	}, [feedback?.id, feedback, opacity, rise, scale, flash, onDone]);
+	}, [feedback?.id, feedback, opacity, scale, numY, numScale, onDone]);
 
 	if (!feedback) return null;
+
+	const actorHero = heroes.find((h) => h.id === feedback.actorId);
+	const actorEnemy = enemies.find((e) => e.id === feedback.actorId);
+	const targetHero = heroes.find((h) => h.id === feedback.targetId);
+	const targetEnemy = enemies.find((e) => e.id === feedback.targetId);
+
+	const actorName =
+		feedback.actorName ?? actorHero?.name ?? actorEnemy?.name ?? 'Combatiente';
+	const actionName = (feedback.actionName ?? 'Attack').toUpperCase();
 
 	const isHeal = feedback.kind === 'heal';
 	const isMiss = feedback.kind === 'miss';
 	const isCrit = feedback.kind === 'critical';
-	const showNumber =
-		(feedback.kind === 'damage' || isHeal || isCrit) && feedback.amount > 0;
+	const showNumber = !isMiss && feedback.amount > 0;
 
-	const numberColor = isHeal ? '#5dce7a' : isCrit ? '#ffd666' : '#ff6b6b';
-	const bannerBorder = isMiss
-		? '#6b6760'
-		: isHeal
-			? '#3d8b5f'
-			: isCrit
-				? '#c9a227'
-				: feedback.kind === 'damage'
-					? '#a33'
-					: '#4a4a55';
+	// Sprites: actor en attack; objetivo en defend (o dead si amount alto y enemigo)
+	const targetDead =
+		!isHeal && !isMiss && targetEnemy != null && targetEnemy.currentLife <= 0;
 
-	const translateY = rise.interpolate({
-		inputRange: [0, 1],
-		outputRange: [8, -40],
-	});
+	const actorPose = isHeal ? 'idle' : 'attack';
+	const targetPose = targetDead
+		? 'dead'
+		: isMiss
+			? 'idle'
+			: isHeal
+				? 'idle'
+				: 'defend';
 
-	const flashOpacity = flash.interpolate({
-		inputRange: [0, 1],
-		outputRange: [0, isMiss ? 0.2 : 0.4],
-	});
+	const numColor = isHeal ? '#5dce7a' : isCrit ? '#ff6b4a' : '#e84a4a';
+	const actorNumColor = isHeal ? '#5dce7a' : '#e8e6e3';
 
 	return (
 		<View
 			style={styles.root}
 			pointerEvents="none"
 		>
-			<Animated.View
-				style={[
-					styles.flash,
-					{
-						opacity: flashOpacity,
-						backgroundColor: isHeal
-							? '#1e3a2a'
-							: isMiss
-								? '#2a2a2a'
-								: '#4a1818',
-					},
-				]}
-			/>
-
-			{showNumber && (
-				<Animated.View
-					style={[
-						styles.floatWrap,
-						{ opacity, transform: [{ translateY }, { scale }] },
-					]}
-				>
-					<Text style={[styles.floatNum, { color: numberColor }]}>
-						{isHeal ? `+${feedback.amount}` : `−${feedback.amount}`}
-					</Text>
-					<Text style={[styles.floatSub, { color: numberColor }]}>
-						{isHeal ? 'vida' : feedback.amount === 1 ? 'herida' : 'heridas'}
-					</Text>
-				</Animated.View>
-			)}
+			{/* Fondo que oculta el resto del combate */}
+			<Animated.View style={[styles.backdrop, { opacity }]} />
 
 			<Animated.View
-				style={[
-					styles.banner,
-					{
-						opacity,
-						transform: [{ scale }],
-						borderColor: bannerBorder,
-					},
-				]}
+				style={[styles.stage, { opacity, transform: [{ scale }] }]}
 			>
-				<Text style={styles.kindTag}>{KIND_LABEL[feedback.kind]}</Text>
-				<Text
-					style={[
-						styles.headline,
-						{
-							color: isMiss
-								? '#c0bcb6'
-								: isHeal
-									? '#5dce7a'
-									: isCrit
-										? '#ffd666'
-										: '#f0eee9',
-						},
-					]}
-				>
-					{feedback.headline}
-				</Text>
+				{/* Título: NOMBRE USES */}
+				<Text style={styles.usesTitle}>{actorName.toUpperCase()} USES</Text>
+
+				{/* Centro: actor | números | objetivo */}
+				<View style={styles.duel}>
+					<View style={styles.side}>
+						{actorHero ? (
+							<HeroSprite
+								hero={actorHero}
+								pose={actorPose}
+								focused
+							/>
+						) : actorEnemy ? (
+							<EnemySprite
+								enemy={actorEnemy}
+								pose={actorPose}
+								focused
+								size={SPRITE}
+								bare
+								flipX
+							/>
+						) : (
+							<View style={styles.placeholder} />
+						)}
+						{isHeal && showNumber && (
+							<Animated.Text
+								style={[
+									styles.floatLeft,
+									{
+										color: actorNumColor,
+										transform: [{ translateY: numY }, { scale: numScale }],
+									},
+								]}
+							>
+								+{feedback.amount}
+							</Animated.Text>
+						)}
+					</View>
+
+					<View style={styles.side}>
+						{targetHero ? (
+							<HeroSprite
+								hero={targetHero}
+								pose={targetPose}
+								focused
+							/>
+						) : targetEnemy ? (
+							<EnemySprite
+								enemy={targetEnemy}
+								pose={targetPose}
+								focused={!targetDead}
+								size={SPRITE}
+								bare
+								flipX
+								killed={targetDead}
+							/>
+						) : (
+							<View style={styles.placeholder} />
+						)}
+						{!isHeal && showNumber && (
+							<Animated.Text
+								style={[
+									styles.floatRight,
+									{
+										color: numColor,
+										transform: [{ translateY: numY }, { scale: numScale }],
+									},
+								]}
+							>
+								−{feedback.amount}
+							</Animated.Text>
+						)}
+						{isMiss && <Text style={styles.missTag}>MISS</Text>}
+					</View>
+				</View>
+
+				{/* Nombre de la acción abajo */}
+				<Text style={styles.actionTitle}>{actionName}</Text>
 				{feedback.detail ? (
-					<Text
-						style={styles.detail}
-						numberOfLines={3}
-					>
-						{feedback.detail}
-					</Text>
+					<Text style={styles.detail}>{feedback.detail}</Text>
 				) : null}
 			</Animated.View>
 		</View>
@@ -214,62 +238,91 @@ export function CombatFeedback({ feedback, onDone }: Props) {
 
 const styles = StyleSheet.create({
 	root: {
-		...StyleSheet.absoluteFill,
-		zIndex: 40,
+		...StyleSheet.absoluteFillObject,
+		zIndex: 80,
+		justifyContent: 'center',
+		alignItems: 'center',
+	},
+	backdrop: {
+		...StyleSheet.absoluteFillObject,
+		backgroundColor: 'rgba(4, 6, 10, 0.88)',
+	},
+	stage: {
+		width: '100%',
+		paddingHorizontal: 24,
 		alignItems: 'center',
 		justifyContent: 'center',
 	},
-	flash: {
-		...StyleSheet.absoluteFill,
-	},
-	floatWrap: {
-		position: 'absolute',
-		top: '32%',
-		alignItems: 'center',
-	},
-	floatNum: {
-		fontSize: 48,
+	usesTitle: {
+		color: '#f2efe8',
+		fontSize: 28,
 		fontWeight: '900',
+		letterSpacing: 2,
+		textAlign: 'center',
+		marginBottom: 18,
 		textShadowColor: 'rgba(0,0,0,0.9)',
 		textShadowOffset: { width: 0, height: 2 },
-		textShadowRadius: 8,
+		textShadowRadius: 6,
 	},
-	floatSub: {
-		fontSize: 14,
-		fontWeight: '700',
-		marginTop: -2,
-		textTransform: 'uppercase',
-		letterSpacing: 1,
-		opacity: 0.9,
+	duel: {
+		flexDirection: 'row',
+		alignItems: 'flex-end',
+		justifyContent: 'center',
+		gap: 48,
+		minHeight: SPRITE + 40,
+		marginBottom: 16,
 	},
-	banner: {
-		marginTop: 36,
-		paddingHorizontal: 20,
-		paddingVertical: 12,
-		borderRadius: 14,
-		backgroundColor: 'rgba(12,12,16,0.92)',
-		borderWidth: 2,
-		maxWidth: '82%',
+	side: {
+		width: SPRITE + 24,
 		alignItems: 'center',
+		justifyContent: 'flex-end',
 	},
-	kindTag: {
-		color: '#7a7670',
-		fontSize: 11,
-		fontWeight: '800',
-		letterSpacing: 1.5,
-		marginBottom: 4,
+	placeholder: {
+		width: SPRITE,
+		height: SPRITE,
 	},
-	headline: {
+	floatLeft: {
+		position: 'absolute',
+		top: 8,
+		left: 0,
+		fontSize: 36,
+		fontWeight: '900',
+		textShadowColor: '#000',
+		textShadowOffset: { width: 0, height: 2 },
+		textShadowRadius: 4,
+	},
+	floatRight: {
+		position: 'absolute',
+		top: 8,
+		right: 0,
+		fontSize: 40,
+		fontWeight: '900',
+		textShadowColor: '#000',
+		textShadowOffset: { width: 0, height: 2 },
+		textShadowRadius: 4,
+	},
+	missTag: {
+		position: 'absolute',
+		top: 20,
+		color: '#9a9690',
+		fontSize: 22,
+		fontWeight: '900',
+		letterSpacing: 2,
+	},
+	actionTitle: {
+		color: '#f2efe8',
 		fontSize: 26,
 		fontWeight: '900',
-		letterSpacing: 0.5,
+		letterSpacing: 1.5,
 		textAlign: 'center',
+		textShadowColor: 'rgba(0,0,0,0.9)',
+		textShadowOffset: { width: 0, height: 2 },
+		textShadowRadius: 6,
 	},
 	detail: {
-		marginTop: 8,
-		color: '#b8b4ae',
-		fontSize: 14,
-		lineHeight: 20,
+		color: '#9a9690',
+		fontSize: 13,
+		marginTop: 6,
 		textAlign: 'center',
 	},
 });

@@ -133,6 +133,8 @@ function buildFeedback(
     detail: lastMsg,
     actorId,
     targetId,
+    actorName: actor?.name,
+    actionName: actionName ?? actionType,
   };
 }
 
@@ -261,7 +263,7 @@ export function useCombatSession(config: CombatSessionConfig | EncounterType = '
         next = executeHeroAttack(prev, encounterType);
       }
 
-      const feedback = buildFeedback(prev, next, actionType);
+      const feedback = buildFeedback(prev, next, actionType, prev.selectedAction?.name ?? actionType);
       const lastMsg = next.log[next.log.length - 1]?.message ?? '';
       const diceTotal = parseDiceTotal(lastMsg);
 
