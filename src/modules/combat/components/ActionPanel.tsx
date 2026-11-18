@@ -1,136 +1,168 @@
 /**
- * Zona izquierda – selección de acción (GDD §5.1)
- * Botones táctiles 48–56 dp, pensados para pulgar izquierdo.
+ * Botones de acción estilo captura: columna derecha
+ * ATTACK (rojo), hechizos (ámbar), DEFEND/otros (verde)
  */
 
 import React from 'react';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
-import type { Action } from '../../../core/types/combat';
-import type { Hero } from '../../../core/types/combat';
+import type { Action, Hero } from '../../../core/types/combat';
 
 type Props = {
-  actions: Action[];
-  selected: Action | null;
-  disabled?: boolean;
-  currentHero?: Hero | null;
-  /** Si el objetivo enemigo ya se auto-eligió (grupo homogéneo) */
-  targetAutoSelected?: boolean;
-  onSelect: (action: Action) => void;
+	actions: Action[];
+	selected: Action | null;
+	disabled?: boolean;
+	currentHero?: Hero | null;
+	targetAutoSelected?: boolean;
+	onSelect: (action: Action) => void;
+	layout?: 'rail' | 'bar' | 'stack';
 };
 
-const CLASS_ICON: Record<NonNullable<Hero['class']>, string> = {
-  warrior: '⚔️',
-  rogue: '🗡️',
-  cleric: '✝️',
-  wizard: '🔮',
-};
+function colorsFor(action: Action): {
+	border: string;
+	bg: string;
+	text: string;
+} {
+	const n = action.name.toLowerCase();
+	if (action.type === 'attack' || n === 'attack') {
+		return { border: '#c43c3c', bg: 'rgba(40, 16, 16, 0.88)', text: '#f0c0c0' };
+	}
+	if (
+		action.type === 'heal' ||
+		n.includes('heal') ||
+		n.includes('defend') ||
+		n.includes('protect')
+	) {
+		return { border: '#3d8b5f', bg: 'rgba(14, 32, 22, 0.88)', text: '#b8e0c8' };
+	}
+	// spells / focus-like
+	return { border: '#c9a227', bg: 'rgba(40, 34, 14, 0.88)', text: '#f0d78c' };
+}
 
 export function ActionPanel({
-  actions,
-  selected,
-  disabled,
-  currentHero,
-  targetAutoSelected = false,
-  onSelect,
+	actions,
+	selected,
+	disabled,
+	currentHero,
+	targetAutoSelected = false,
+	onSelect,
+	layout = 'stack',
 }: Props) {
-  return (
-    <View style={styles.panel}>
-      <Text style={styles.label}>Acciones</Text>
-      {currentHero && (
-        <Text style={styles.heroHint} numberOfLines={1}>
-          {CLASS_ICON[currentHero.class] ?? ''} {currentHero.name}
-        </Text>
-      )}
-      {actions.map((action) => {
-        const isSelected = selected?.name === action.name && selected?.type === action.type;
-        // No pedir "elige objetivo" si ya se auto-seleccionó (ataque a grupo idéntico)
-        const showTargetHint =
-          action.requiresTarget &&
-          !(isSelected && targetAutoSelected && (action.type === 'attack' || action.type === 'spell'));
-        return (
-          <Pressable
-            key={`${action.type}-${action.name}`}
-            disabled={disabled}
-            onPress={() => onSelect(action)}
-            hitSlop={4}
-            style={({ pressed }) => [
-              styles.btn,
-              isSelected && styles.btnSelected,
-              disabled && styles.btnDisabled,
-              pressed && !disabled && styles.btnPressed,
-            ]}
-            accessibilityRole="button"
-            accessibilityState={{ selected: isSelected, disabled: !!disabled }}
-            accessibilityLabel={action.name}
-          >
-            <Text style={[styles.btnText, isSelected && styles.btnTextSelected]}>
-              {action.name}
-            </Text>
-            {showTargetHint && (
-              <Text style={styles.btnHint}>elige objetivo</Text>
-            )}
-          </Pressable>
-        );
-      })}
-    </View>
-  );
+	return (
+		<View style={layout === 'bar' ? styles.barWrap : styles.stackWrap}>
+			{currentHero && (
+				<Text
+					style={styles.actorLabel}
+					numberOfLines={1}
+				>
+					{currentHero.name}
+				</Text>
+			)}
+			<View style={layout === 'bar' ? styles.barRow : styles.stackCol}>
+				{actions.map((action) => {
+					const isSelected =
+						selected?.name === action.name && selected?.type === action.type;
+					const c = colorsFor(action);
+					const showHint =
+						action.requiresTarget &&
+						!(
+							isSelected &&
+							targetAutoSelected &&
+							(action.type === 'attack' || action.type === 'spell')
+						);
+
+					return (
+						<Pressable
+							key={`${action.type}-${action.name}`}
+							disabled={disabled}
+							onPress={() => onSelect(action)}
+							style={({ pressed }) => [
+								styles.btn,
+								{
+									borderColor: c.border,
+									backgroundColor: c.bg,
+								},
+								isSelected && styles.btnSelected,
+								disabled && styles.btnDisabled,
+								pressed && !disabled && styles.btnPressed,
+							]}
+							accessibilityRole="button"
+							accessibilityLabel={action.name}
+						>
+							<Text style={[styles.btnText, { color: c.text }]}>
+								{action.name.toUpperCase()}
+							</Text>
+							{showHint && <Text style={styles.hint}>objetivo</Text>}
+						</Pressable>
+					);
+				})}
+			</View>
+		</View>
+	);
 }
 
 const styles = StyleSheet.create({
-  panel: {
-    width: '28%',
-    paddingVertical: 8,
-    paddingHorizontal: 10,
-    backgroundColor: '#16161a',
-    borderRightWidth: 1,
-    borderRightColor: '#2a2a32',
-  },
-  label: {
-    color: '#6b6760',
-    fontSize: 11,
-    textTransform: 'uppercase',
-    letterSpacing: 1,
-    marginBottom: 4,
-  },
-  heroHint: {
-    color: '#c9a227',
-    fontSize: 12,
-    fontWeight: '600',
-    marginBottom: 10,
-  },
-  btn: {
-    minHeight: 52, // 48–56 dp
-    marginBottom: 10,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    justifyContent: 'center',
-    backgroundColor: '#2a2a35',
-    borderRadius: 10,
-    borderWidth: 2,
-    borderColor: '#3d3d4a',
-  },
-  btnSelected: {
-    borderColor: '#c9a227',
-    backgroundColor: '#3a3420',
-  },
-  btnPressed: {
-    backgroundColor: '#353545',
-    transform: [{ scale: 0.98 }],
-  },
-  btnDisabled: {
-    opacity: 0.35,
-  },
-  btnText: {
-    color: '#e8e6e3',
-    fontSize: 16,
-    fontWeight: '700',
-  },
-  btnTextSelected: {
-    color: '#f0d78c',
-  },
-  btnHint: {
-    color: '#6b6760',
-    fontSize: 11,
-    marginTop: 2,
-  },
+	stackWrap: {
+		alignItems: 'stretch',
+		gap: 6,
+		minWidth: 110,
+	},
+	barWrap: {
+		alignItems: 'center',
+		gap: 6,
+	},
+	actorLabel: {
+		color: '#c9a227',
+		fontSize: 11,
+		fontWeight: '800',
+		textAlign: 'center',
+		marginBottom: 2,
+		textShadowColor: 'rgba(0,0,0,0.8)',
+		textShadowOffset: { width: 0, height: 1 },
+		textShadowRadius: 2,
+	},
+	stackCol: {
+		gap: 8,
+	},
+	barRow: {
+		flexDirection: 'row',
+		flexWrap: 'wrap',
+		justifyContent: 'center',
+		gap: 8,
+	},
+	btn: {
+		minHeight: 40,
+		paddingVertical: 8,
+		paddingHorizontal: 12,
+		borderRadius: 6,
+		borderWidth: 2.5,
+		alignItems: 'center',
+		justifyContent: 'center',
+		// sombra tipo placa
+		shadowColor: '#000',
+		shadowOpacity: 0.45,
+		shadowRadius: 4,
+		shadowOffset: { width: 0, height: 2 },
+		elevation: 4,
+	},
+	btnSelected: {
+		borderWidth: 3,
+		transform: [{ scale: 1.04 }],
+	},
+	btnPressed: {
+		opacity: 0.9,
+		transform: [{ scale: 0.97 }],
+	},
+	btnDisabled: {
+		opacity: 0.35,
+	},
+	btnText: {
+		fontSize: 13,
+		fontWeight: '900',
+		letterSpacing: 1.2,
+	},
+	hint: {
+		color: '#9a9690',
+		fontSize: 9,
+		marginTop: 1,
+	},
 });

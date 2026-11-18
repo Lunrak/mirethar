@@ -175,21 +175,7 @@ export default function CombatScreen({
 				</View>
 			</View>
 
-			{/* Acciones izquierda, info objetivo derecha — overlays */}
-			<View
-				style={styles.leftRail}
-				pointerEvents="box-none"
-			>
-				<ActionPanel
-					actions={actions}
-					selected={state.selectedAction}
-					disabled={actionsDisabled}
-					currentHero={currentHero}
-					targetAutoSelected={targetAutoSelected}
-					onSelect={selectHeroAction}
-				/>
-			</View>
-
+			{/* Info objetivo — derecha, ligera */}
 			<View
 				style={styles.rightRail}
 				pointerEvents="box-none"
@@ -200,6 +186,22 @@ export default function CombatScreen({
 					selectedAction={state.selectedAction}
 					targetAutoSelected={targetAutoSelected}
 					canResolveNow={canResolveNow}
+				/>
+			</View>
+
+			{/* Acciones — columna derecha estilo captura */}
+			<View
+				style={styles.actionStack}
+				pointerEvents="box-none"
+			>
+				<ActionPanel
+					layout="stack"
+					actions={actions}
+					selected={state.selectedAction}
+					disabled={actionsDisabled}
+					currentHero={currentHero}
+					targetAutoSelected={targetAutoSelected}
+					onSelect={selectHeroAction}
 				/>
 			</View>
 
@@ -229,7 +231,11 @@ export default function CombatScreen({
 const styles = StyleSheet.create({
 	root: { flex: 1, backgroundColor: '#1a1a1e' },
 	field: {
-		...StyleSheet.absoluteFill,
+		position: 'absolute',
+		top: 0,
+		left: 0,
+		right: 0,
+		bottom: 0,
 		zIndex: 1,
 	},
 	header: {
@@ -275,22 +281,19 @@ const styles = StyleSheet.create({
 		fontSize: 13,
 		fontWeight: '800',
 	},
-	leftRail: {
-		position: 'absolute',
-		left: 6,
-		top: 48,
-		bottom: 56,
-		zIndex: 20,
-		justifyContent: 'center',
-		maxWidth: 120,
-	},
 	rightRail: {
 		position: 'absolute',
-		right: 6,
+		right: 120,
 		top: 48,
-		bottom: 110,
 		zIndex: 20,
-		maxWidth: 150,
+		maxWidth: 140,
+	},
+	actionStack: {
+		position: 'absolute',
+		right: 10,
+		bottom: 72,
+		zIndex: 35,
+		alignItems: 'stretch',
 	},
 	logSlot: {
 		position: 'absolute',

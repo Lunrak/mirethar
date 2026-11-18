@@ -1,8 +1,6 @@
 /**
- * Campo de batalla – selección de objetivo tocando unidades
- * Héroes (izq) / Enemigos (der). Targets ≥ 48 dp para dos pulgares.
- * Día 18: animación de impacto.
- * Día 19: life bar, objetivo primario, estados, silueta por equipo.
+ * Combate vertical inspirado en UI de referencia:
+ * enemigos arriba, héroes abajo, anillo bajo los pies, barras de vida.
  */
 
 import React, { useEffect, useRef } from 'react';
@@ -14,11 +12,7 @@ import {
 	getEnemyTemplate,
 } from '../../../core/data/enemyLookup';
 import {
-	HeroGearIcons,
-	LifeBar,
 	StatusBadges,
-	PrimaryTargetMarker,
-	statusLabel,
 	HeroSprite,
 	EnemySprite,
 	resolvePose,
@@ -33,31 +27,11 @@ type Props = {
 	phase: string;
 	onSelectEnemy: (id: string) => void;
 	onSelectHero: (id: string) => void;
-	/** Si true, el ataque ya tiene objetivo automático (grupo homogéneo) */
 	targetAutoSelected?: boolean;
-	/** Id de la unidad que recibe impacto visual */
 	impactTargetId?: string | null;
-	/** Id del actor que actúa (pulso suave) */
 	impactActorId?: string | null;
-	/** Cambia en cada resolución para reiniciar animación */
 	impactKey?: string | null;
 };
-
-/** Etiqueta legible del tipo 4AD (vermin / minion / boss / weird) */
-function enemyTypeLabel(type: string): string {
-	switch (type) {
-		case 'vermin':
-			return 'Vermin';
-		case 'minion':
-			return 'Minion';
-		case 'boss':
-			return 'Boss';
-		case 'weird':
-			return 'Weird';
-		default:
-			return type || 'Enemigo';
-	}
-}
 
 function inferTypeFromId(templateId: string): string {
 	if (templateId.startsWith('vermin_')) return 'vermin';
@@ -67,140 +41,183 @@ function inferTypeFromId(templateId: string): string {
 	return 'enemigo';
 }
 
-function useImpactAnim(active: boolean, key: string | null | undefined) {
-	const scale = useRef(new Animated.Value(1)).current;
-	const glow = useRef(new Animated.Value(0)).current;
+/** Anillo elíptico bajo los pies (estilo captura: blanco / dorado de turno) */
+function FootRing({
+	activeTurn,
+	selected,
+	selectable,
+	isHero,
+}: {
+	activeTurn: boolean;
+	selected: boolean;
+	selectable: boolean;
+	isHero: boolean;
+}) {
+	const pulse = useRef(new Animated.Value(1)).current;
 
 	useEffect(() => {
-		if (!active || !key) {
-			scale.setValue(1);
-			glow.setValue(0);
+		if (!activeTurn) {
+			pulse.setValue(1);
 			return;
 		}
-		// Zoom solo en actor / objetivo(s): in → hold → out (~1 s total)
-		scale.setValue(1);
-		glow.setValue(0);
-		const anim = Animated.sequence([
-			Animated.parallel([
-				Animated.timing(scale, {
-					toValue: 1.22,
-					duration: 220,
+		const loop = Animated.loop(
+			Animated.sequence([
+				Animated.timing(pulse, {
+					toValue: 1.12,
+					duration: 500,
 					useNativeDriver: true,
 				}),
-				Animated.timing(glow, {
+				Animated.timing(pulse, {
 					toValue: 1,
-					duration: 220,
+					duration: 500,
 					useNativeDriver: true,
 				}),
 			]),
-			Animated.delay(480),
-			Animated.parallel([
-				Animated.timing(scale, {
-					toValue: 1,
-					duration: 350,
-					useNativeDriver: true,
-				}),
-				Animated.timing(glow, {
-					toValue: 0,
-					duration: 350,
-					useNativeDriver: true,
-				}),
-			]),
-		]);
-		anim.start();
-		return () => anim.stop();
-	}, [active, key, scale, glow]);
+		);
+		loop.start();
+		return () => loop.stop();
+	}, [activeTurn, pulse]);
 
-	return { scale, glow };
-}
+	// Neutro: anillo blanco fino. Turno: dorado grueso. Selección: rojo/verde.
+	let border = 'rgba(230, 230, 235, 0.85)';
+	let borderW = 2;
+	let bg = 'transparent';
 
-function UnitCardShell({
-	activeImpact,
-	impactKey,
-	isPrimaryTarget,
-	children,
-	style,
-}: {
-	activeImpact: boolean;
-	impactKey?: string | null;
-	isPrimaryTarget?: boolean;
-	children: React.ReactNode;
-	style: object | object[];
-}) {
-	const { scale, glow } = useImpactAnim(activeImpact, impactKey);
+	if (selectable && !selected && !activeTurn) {
+		border = isHero ? 'rgba(180, 210, 255, 0.9)' : 'rgba(255, 160, 160, 0.9)';
+		borderW = 2;
+	}
+	if (selected) {
+		border = isHero ? '#7ec8ff' : '#ff5a5a';
+		borderW = 3;
+		bg = isHero ? 'rgba(126, 200, 255, 0.12)' : 'rgba(255, 90, 90, 0.12)';
+	}
+	if (activeTurn) {
+		border = '#f0c94d';
+		borderW = 3.5;
+		bg = 'rgba(240, 201, 77, 0.18)';
+	}
 
 	return (
 		<Animated.View
 			style={[
-				style,
+				styles.footRing,
 				{
-					transform: [{ scale }],
+					borderColor: border,
+					borderWidth: borderW,
+					backgroundColor: bg,
+					transform: [{ scaleX: pulse }, { scaleY: pulse }],
 				},
-				activeImpact && { zIndex: 2 },
-				isPrimaryTarget && styles.cardPrimaryTarget,
 			]}
-		>
-			<PrimaryTargetMarker visible={!!isPrimaryTarget} />
-			{children}
-			{activeImpact && (
-				<Animated.View
-					pointerEvents="none"
-					style={[
-						StyleSheet.absoluteFill,
-						{
-							borderRadius: 10,
-							backgroundColor: '#fff',
-							opacity: glow.interpolate({
-								inputRange: [0, 1],
-								outputRange: [0, 0.28],
-							}),
-						},
-					]}
-				/>
-			)}
-		</Animated.View>
+		/>
 	);
 }
 
-/** Animación de huida: desliza hacia fuera y se desvanece */
-function FleeSlide({
-	active,
-	children,
-	style,
+/** Barra de vida estilo captura: fondo oscuro, relleno ámbar, números a los lados */
+function CombatLifeBar({
+	current,
+	max,
+	showNumbers = true,
 }: {
-	active: boolean;
-	children: React.ReactNode;
-	style?: object;
+	current: number;
+	max: number;
+	showNumbers?: boolean;
 }) {
-	const tx = React.useRef(new Animated.Value(0)).current;
-	const op = React.useRef(new Animated.Value(1)).current;
-
-	React.useEffect(() => {
-		if (!active) {
-			tx.setValue(0);
-			op.setValue(1);
-			return;
-		}
-		Animated.parallel([
-			Animated.timing(tx, {
-				toValue: 140,
-				duration: 700,
-				useNativeDriver: true,
-			}),
-			Animated.timing(op, {
-				toValue: 0,
-				duration: 700,
-				useNativeDriver: true,
-			}),
-		]).start();
-	}, [active, tx, op]);
-
+	const ratio = max > 0 ? Math.max(0, Math.min(1, current / max)) : 0;
 	return (
-		<Animated.View
-			style={[style, { transform: [{ translateX: tx }], opacity: op }]}
+		<View style={styles.hpRow}>
+			{showNumbers && <Text style={styles.hpNum}>{Math.max(0, current)}</Text>}
+			<View style={styles.hpTrack}>
+				<View style={[styles.hpFill, { flex: ratio }]} />
+				<View style={{ flex: 1 - ratio }} />
+			</View>
+			{showNumbers && <Text style={styles.hpNumMax}>{max}</Text>}
+		</View>
+	);
+}
+
+function UnitToken({
+	children,
+	name,
+	levelLabel,
+	activeTurn,
+	selected,
+	selectable,
+	down,
+	isHero,
+	onPress,
+	lifeCurrent,
+	lifeMax,
+	showLife,
+	statusSlot,
+	spriteSize,
+}: {
+	children: React.ReactNode;
+	name: string;
+	levelLabel?: string;
+	activeTurn: boolean;
+	selected: boolean;
+	selectable: boolean;
+	down: boolean;
+	isHero: boolean;
+	onPress: () => void;
+	lifeCurrent?: number;
+	lifeMax?: number;
+	showLife?: boolean;
+	statusSlot?: React.ReactNode;
+	spriteSize: number;
+}) {
+	return (
+		<Pressable
+			disabled={!selectable && !activeTurn}
+			onPress={onPress}
+			style={({ pressed }) => [
+				styles.token,
+				down && styles.tokenDown,
+				pressed && selectable && styles.tokenPressed,
+			]}
+			accessibilityRole="button"
+			accessibilityLabel={name}
 		>
-			{children}
-		</Animated.View>
+			{/* Badge de nivel (enemigos) */}
+			{levelLabel ? (
+				<View style={styles.lvBadge}>
+					<Text style={styles.lvText}>{levelLabel}</Text>
+				</View>
+			) : null}
+
+			<View
+				style={[
+					styles.spriteWrap,
+					{ width: spriteSize + 8, height: spriteSize + 4 },
+				]}
+			>
+				{children}
+			</View>
+
+			{/* Anillo bajo pies */}
+			<FootRing
+				activeTurn={activeTurn}
+				selected={selected}
+				selectable={selectable}
+				isHero={isHero}
+			/>
+
+			{showLife && lifeCurrent != null && lifeMax != null && (
+				<CombatLifeBar
+					current={lifeCurrent}
+					max={lifeMax}
+				/>
+			)}
+
+			<Text
+				style={styles.tokenName}
+				numberOfLines={1}
+			>
+				{name}
+			</Text>
+			{statusSlot}
+		</Pressable>
 	);
 }
 
@@ -216,7 +233,6 @@ export function Battlefield({
 	targetAutoSelected = false,
 	impactTargetId = null,
 	impactActorId = null,
-	impactKey = null,
 }: Props) {
 	const needsTarget = !!selectedAction?.requiresTarget;
 	const targetingEnemy =
@@ -225,252 +241,113 @@ export function Battlefield({
 	const targetingHero =
 		needsTarget &&
 		(selectedAction?.type === 'heal' || selectedAction?.name === 'Protect');
-
 	const canTap = phase === 'heroTurn';
-	const showEnemyPickHint =
-		canTap && targetingEnemy && !targetAutoSelected && !selectedTargetId;
-	const showHeroPickHint = canTap && targetingHero && !selectedTargetId;
+
+	const n = enemies.filter((e) => getEnemyMaxLife(e) <= 1).length;
+	const enemySprite = n > 10 ? 48 : n > 6 ? 56 : 64;
+	const heroSprite = 72;
 
 	return (
 		<View style={styles.root}>
-			<Text style={styles.label}>Campo de Batalla</Text>
-			{(showEnemyPickHint || showHeroPickHint) && (
-				<Text style={styles.hint}>
-					{showHeroPickHint
-						? 'Toca un héroe objetivo'
-						: 'Toca un enemigo objetivo'}
-				</Text>
-			)}
-
-			<View style={styles.row}>
-				{/* Héroes – todos visibles, compactos */}
-				<View style={styles.heroCol}>
-					<Text style={styles.colTitle}>Héroes</Text>
-					<View style={styles.heroGrid}>
-						{heroes.map((h) => {
-							const down = h.isFallen || h.isDead || h.life <= 0;
-							const active = h.id === currentActorId;
-							const selected = h.id === selectedTargetId;
-							const isPrimary =
-								selected && (targetingHero || phase === 'heroTurn');
-							const selectable = canTap && targetingHero && !down;
-							const hit =
-								impactKey != null &&
-								(h.id === impactTargetId || h.id === impactActorId);
-							const st = getHeroStatus(h);
-							const pose = resolvePose(h.id, impactActorId, impactTargetId);
-							const focused = !!hit;
-
-							return (
-								<Pressable
-									key={h.id}
-									disabled={!selectable}
-									onPress={() => onSelectHero(h.id)}
-									style={({ pressed }) => [
-										styles.heroToken,
-										active && styles.heroTokenActive,
-										selected && styles.heroTokenSelected,
-										down && styles.tokenDown,
-										pressed && selectable && styles.cardPressed,
-									]}
-									accessibilityRole="button"
-									accessibilityLabel={`${h.name}, ${h.class}, ${statusLabel(st)}, ${h.life} de ${h.maxLife}`}
-								>
-									<Text
-										style={styles.tokenName}
-										numberOfLines={1}
-									>
-										{h.name}
-									</Text>
-									<Text style={styles.tokenLevel}>
-										{h.class}
-										{active ? ' ·' : ''}
-									</Text>
-									<HeroSprite
-										hero={h}
-										pose={pose}
-										focused={focused}
-									/>
-									{(selected || isPrimary) && !down && (
-										<View style={[styles.selectOval, styles.selectOvalHero]} />
-									)}
-									<LifeBar
-										current={h.life}
-										max={h.maxLife}
-										isEnemy={false}
-									/>
-									<StatusBadges hero={h} />
-								</Pressable>
-							);
-						})}
-					</View>
-				</View>
-
-				<Text style={styles.vs}>VS</Text>
-
-				{/* Enemigos */}
-				<View style={styles.enemyCol}>
-					<Text style={styles.colTitle}>Enemigos</Text>
-					{(() => {
-						const swarm = enemies.filter((e) => getEnemyMaxLife(e) <= 1);
-						const elites = enemies.filter((e) => getEnemyMaxLife(e) > 1);
-						const n = swarm.length;
-						// Tamaño de token para que quepan en 2–3 filas
-						const tokenSize = n > 14 ? 40 : n > 9 ? 48 : n > 5 ? 52 : 56;
-						const renderToken = (e: EnemyInstance) => {
-							const fled = !!e.fled;
-							const killed = e.currentLife <= 0 && !fled;
-							const outOfFight = killed || fled;
-							const selected = e.id === selectedTargetId;
-							const isPrimary =
-								selected && (targetingEnemy || targetAutoSelected);
-							const selectable =
-								canTap && targetingEnemy && !outOfFight && !targetAutoSelected;
-							const hit =
-								impactKey != null &&
-								(e.id === impactTargetId || e.id === impactActorId);
-							const pose = resolvePose(
-								e.id,
-								impactActorId,
-								impactTargetId,
-								killed,
-							);
-							const focused = !!hit && !outOfFight;
-							const maxLife = getEnemyMaxLife(e);
-							const showLifeBar = maxLife > 1;
-
-							if (showLifeBar) {
-								// Boss / multi-life: tarjeta compacta
-								return (
-									<FleeSlide
-										key={e.id}
-										active={fled}
-										style={{ width: '100%' }}
-									>
-										<UnitCardShell
-											activeImpact={!!hit && !fled}
-											impactKey={impactKey}
-											isPrimaryTarget={!!isPrimary && !fled}
-											style={[
-												styles.card,
-												styles.cardEnemy,
-												selected && styles.cardSelectedEnemy,
-												outOfFight && styles.cardDown,
-												selectable && styles.cardSelectableEnemy,
-											]}
-										>
-											<Pressable
-												disabled={!selectable}
-												onPress={() => onSelectEnemy(e.id)}
-												style={({ pressed }) => [
-													styles.eliteInner,
-													pressed && selectable && styles.cardPressed,
-												]}
-											>
-												<View style={styles.eliteSpriteCol}>
-													{fled ? (
-														<View style={styles.fledBox}>
-															<Text style={styles.fledText}>huyó</Text>
-														</View>
-													) : (
-														<EnemySprite
-															enemy={e}
-															pose={pose}
-															focused={focused}
-															flipX
-														/>
-													)}
-													{(selected || isPrimary) && !fled && (
-														<View style={styles.selectOval} />
-													)}
-												</View>
-												<View style={{ flex: 1 }}>
-													<Text
-														style={styles.name}
-														numberOfLines={1}
-													>
-														{e.name}
-													</Text>
-													<Text style={styles.meta}>
-														L{e.level} · Atk {e.attacks}
-													</Text>
-													{!fled && (
-														<LifeBar
-															current={killed ? 0 : e.currentLife}
-															max={maxLife}
-															isEnemy
-														/>
-													)}
-												</View>
-											</Pressable>
-										</UnitCardShell>
-									</FleeSlide>
-								);
-							}
-
-							// Minion / vermin 1 life: token compacto en rejilla
-							return (
-								<FleeSlide
-									key={e.id}
-									active={fled}
-									style={styles.tokenWrap}
-								>
-									<Pressable
-										disabled={!selectable}
-										onPress={() => onSelectEnemy(e.id)}
-										style={({ pressed }) => [
-											styles.token,
-											outOfFight && styles.tokenDown,
-											pressed && selectable && styles.cardPressed,
-										]}
-										accessibilityRole="button"
-										accessibilityLabel={`${e.name}, level ${e.level}`}
-									>
-										<Text
-											style={styles.tokenName}
-											numberOfLines={1}
-										>
-											{e.name}
-										</Text>
-										<Text style={styles.tokenLevel}>L{e.level}</Text>
-										{fled ? (
-											<View
-												style={[
-													styles.fledBox,
-													{ width: tokenSize, height: tokenSize },
-												]}
-											>
-												<Text style={styles.fledText}>huyó</Text>
-											</View>
-										) : (
-											<EnemySprite
-												enemy={e}
-												pose={pose}
-												focused={focused}
-												size={tokenSize}
-												bare
-												flipX
-											/>
-										)}
-										{(selected || isPrimary) && !outOfFight && (
-											<View style={styles.selectOval} />
-										)}
-									</Pressable>
-								</FleeSlide>
-							);
-						};
+			{/* ENEMIGOS — fila superior */}
+			<View style={styles.enemyZone}>
+				<View style={styles.row}>
+					{enemies.map((e) => {
+						const fled = !!e.fled;
+						const killed = e.currentLife <= 0 && !fled;
+						const out = killed || fled;
+						const selected = e.id === selectedTargetId;
+						const activeTurn =
+							!out &&
+							phase === 'enemyTurn' &&
+							(e.id === currentActorId || e.id === impactActorId);
+						const selectable =
+							canTap && targetingEnemy && !out && !targetAutoSelected;
+						const pose = resolvePose(
+							e.id,
+							impactActorId,
+							impactTargetId,
+							killed,
+						);
+						const focused =
+							!out && (e.id === impactTargetId || e.id === impactActorId);
+						const maxLife = getEnemyMaxLife(e);
 
 						return (
-							<>
-								{elites.map((e) => renderToken(e))}
-								{swarm.length > 0 && (
-									<View style={styles.swarmGrid}>
-										{swarm.map((e) => renderToken(e))}
+							<UnitToken
+								key={e.id}
+								name={out ? (fled ? 'huyó' : e.name) : e.name}
+								levelLabel={out ? undefined : `LV ${e.level}`}
+								activeTurn={!!activeTurn}
+								selected={selected && !out}
+								selectable={selectable}
+								down={out}
+								isHero={false}
+								onPress={() => onSelectEnemy(e.id)}
+								showLife={!fled}
+								lifeCurrent={killed ? 0 : e.currentLife}
+								lifeMax={maxLife}
+								spriteSize={enemySprite}
+								statusSlot={<StatusBadges enemy={e} />}
+							>
+								{fled ? (
+									<View style={styles.fledBox}>
+										<Text style={styles.fledText}>huyó</Text>
 									</View>
+								) : (
+									<EnemySprite
+										enemy={e}
+										pose={pose}
+										focused={!!focused}
+										size={enemySprite}
+										bare
+										flipX
+									/>
 								)}
-							</>
+							</UnitToken>
 						);
-					})()}
+					})}
+				</View>
+			</View>
+
+			{/* Espacio central (animaciones / skills a futuro) */}
+			<View style={styles.mid} />
+
+			{/* HÉROES — fila inferior */}
+			<View style={styles.heroZone}>
+				<View style={styles.row}>
+					{heroes.map((h) => {
+						const down = h.isFallen || h.isDead || h.life <= 0;
+						const activeTurn = h.id === currentActorId && phase === 'heroTurn';
+						const selected = h.id === selectedTargetId;
+						const selectable = canTap && targetingHero && !down;
+						const pose = resolvePose(h.id, impactActorId, impactTargetId);
+						const focused = h.id === impactTargetId || h.id === impactActorId;
+
+						return (
+							<UnitToken
+								key={h.id}
+								name={h.name}
+								activeTurn={activeTurn}
+								selected={selected}
+								selectable={selectable}
+								down={down}
+								isHero
+								onPress={() => onSelectHero(h.id)}
+								showLife
+								lifeCurrent={h.life}
+								lifeMax={h.maxLife}
+								spriteSize={heroSprite}
+								statusSlot={<StatusBadges hero={h} />}
+							>
+								<HeroSprite
+									hero={h}
+									pose={pose}
+									focused={!!focused}
+								/>
+							</UnitToken>
+						);
+					})}
 				</View>
 			</View>
 		</View>
@@ -478,170 +355,120 @@ export function Battlefield({
 }
 
 const styles = StyleSheet.create({
-	root: { flex: 1, paddingTop: 40, paddingHorizontal: 8, paddingBottom: 8 },
-	label: {
-		color: '#6b6760',
-		fontSize: 11,
-		textTransform: 'uppercase',
-		letterSpacing: 1,
-		marginBottom: 4,
+	root: {
+		flex: 1,
+		paddingTop: 36,
+		paddingHorizontal: 12,
+		paddingBottom: 12,
+		justifyContent: 'space-between',
 	},
-	hint: {
-		color: '#5dce7a',
-		fontSize: 12,
-		fontWeight: '600',
-		marginBottom: 6,
+	enemyZone: {
+		minHeight: 130,
+		justifyContent: 'flex-start',
+	},
+	mid: {
+		flex: 1,
+		minHeight: 24,
+	},
+	heroZone: {
+		minHeight: 150,
+		justifyContent: 'flex-end',
+		paddingBottom: 8,
 	},
 	row: {
+		flexDirection: 'row',
+		flexWrap: 'wrap',
+		justifyContent: 'center',
+		alignItems: 'flex-end',
+		gap: 14,
+	},
+	token: {
+		alignItems: 'center',
+		minWidth: 78,
+		maxWidth: 120,
+	},
+	tokenDown: { opacity: 0.35 },
+	tokenPressed: { opacity: 0.88, transform: [{ scale: 0.97 }] },
+	lvBadge: {
+		backgroundColor: 'rgba(12,12,16,0.85)',
+		paddingHorizontal: 8,
+		paddingVertical: 2,
+		borderRadius: 6,
+		marginBottom: 2,
+		borderWidth: 1,
+		borderColor: 'rgba(255,255,255,0.15)',
+	},
+	lvText: {
+		color: '#f0f0f0',
+		fontSize: 10,
+		fontWeight: '800',
+		letterSpacing: 0.5,
+	},
+	spriteWrap: {
+		alignItems: 'center',
+		justifyContent: 'flex-end',
+	},
+	footRing: {
+		width: 56,
+		height: 16,
+		borderRadius: 28,
+		marginTop: -2,
+		marginBottom: 3,
+	},
+	hpRow: {
+		flexDirection: 'row',
+		alignItems: 'center',
+		gap: 3,
+		width: 72,
+		marginBottom: 2,
+	},
+	hpTrack: {
 		flex: 1,
 		flexDirection: 'row',
-		alignItems: 'stretch',
-		justifyContent: 'space-between',
-		gap: 4,
+		height: 7,
+		borderRadius: 3,
+		backgroundColor: 'rgba(20,18,16,0.9)',
+		overflow: 'hidden',
+		borderWidth: 1,
+		borderColor: 'rgba(0,0,0,0.5)',
 	},
-	col: { flex: 1, maxWidth: 190 },
-	colTitle: {
-		color: '#6b6760',
-		fontSize: 11,
-		textTransform: 'uppercase',
-		marginBottom: 6,
-		letterSpacing: 1,
+	hpFill: {
+		backgroundColor: '#e8b84a',
+		borderRadius: 2,
 	},
-	card: {
-		minHeight: 64,
-		marginBottom: 10,
-		paddingVertical: 8,
-		paddingHorizontal: 10,
-		backgroundColor: '#22222a',
-		borderRadius: 10,
-		borderWidth: 2,
-		borderColor: '#3a3a45',
-		overflow: 'visible',
-		position: 'relative',
+	hpNum: {
+		color: '#e8e6e3',
+		fontSize: 9,
+		fontWeight: '800',
+		minWidth: 16,
+		textAlign: 'right',
 	},
-	cardEnemy: { backgroundColor: '#2a1e1e' },
-	cardActive: { borderColor: '#c9a227' },
-	cardSelectedHero: { borderColor: '#5dce7a', backgroundColor: '#1e2a22' },
-	cardSelectedEnemy: { borderColor: '#e55', backgroundColor: '#3a2020' },
-	cardPrimaryTarget: {
-		borderColor: '#e55',
-		shadowColor: '#e55',
-		shadowOpacity: 0.45,
-		shadowRadius: 6,
-		shadowOffset: { width: 0, height: 0 },
-		elevation: 4,
-	},
-	cardSelectable: { borderColor: '#4a6a50' },
-	cardSelectableEnemy: { borderColor: '#6a4040' },
-	cardPressed: { transform: [{ scale: 0.97 }], opacity: 0.9 },
-	cardDown: { opacity: 0.4 },
-	cardDead: { opacity: 0.3, borderColor: '#333' },
-	heroTop: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-	heroText: { flex: 1, minWidth: 0 },
-	enemyTop: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-	enemyIcon: { fontSize: 22 },
-	name: { color: '#e8e6e3', fontSize: 14, fontWeight: '700' },
-	meta: { color: '#6b6760', fontSize: 11, marginTop: 1 },
-	vs: {
-		color: '#5a5650',
-		fontSize: 14,
+	hpNumMax: {
+		color: '#9a9690',
+		fontSize: 9,
 		fontWeight: '700',
-		marginHorizontal: 6,
+		minWidth: 16,
+	},
+	tokenName: {
+		color: '#e8e6e3',
+		fontSize: 11,
+		fontWeight: '700',
+		textAlign: 'center',
+		maxWidth: 100,
+		textShadowColor: 'rgba(0,0,0,0.8)',
+		textShadowOffset: { width: 0, height: 1 },
+		textShadowRadius: 2,
 	},
 	fledBox: {
-		width: 64,
-		height: 64,
-		borderRadius: 8,
-		backgroundColor: '#1a1a22',
-		borderWidth: 1,
-		borderColor: '#5a5650',
+		width: 56,
+		height: 56,
 		alignItems: 'center',
 		justifyContent: 'center',
 	},
 	fledText: {
 		color: '#9a9690',
-		fontSize: 11,
+		fontSize: 12,
 		fontWeight: '800',
 		textTransform: 'uppercase',
-		letterSpacing: 0.5,
-	},
-	enemyCol: { flex: 1.15, minWidth: 160, maxWidth: 280 },
-	heroCol: { flex: 1, minWidth: 150, maxWidth: 240 },
-	heroGrid: {
-		flex: 1,
-		flexDirection: 'row',
-		flexWrap: 'wrap',
-		alignContent: 'center',
-		alignItems: 'flex-end',
-		justifyContent: 'center',
-		gap: 6,
-	},
-	heroToken: {
-		width: '46%',
-		maxWidth: 110,
-		alignItems: 'center',
-		paddingVertical: 4,
-		paddingHorizontal: 2,
-	},
-	heroTokenActive: {
-		borderRadius: 10,
-		backgroundColor: 'rgba(201, 162, 39, 0.12)',
-	},
-	heroTokenSelected: {
-		borderRadius: 10,
-		backgroundColor: 'rgba(93, 206, 122, 0.12)',
-	},
-	selectOvalHero: {
-		backgroundColor: 'rgba(93, 206, 122, 0.45)',
-		borderColor: '#5dce7a',
-	},
-
-	swarmGrid: {
-		flexDirection: 'row',
-		flexWrap: 'wrap',
-		alignItems: 'flex-end',
-		justifyContent: 'flex-start',
-		gap: 4,
-	},
-	tokenWrap: {
-		marginBottom: 2,
-	},
-	token: {
-		alignItems: 'center',
-		paddingHorizontal: 2,
-		paddingTop: 2,
-		paddingBottom: 4,
-		minWidth: 52,
-	},
-	tokenDown: { opacity: 0.4 },
-	tokenName: {
-		color: '#e8e6e3',
-		fontSize: 10,
-		fontWeight: '700',
-		maxWidth: 64,
-		textAlign: 'center',
-	},
-	tokenLevel: {
-		color: '#9a9690',
-		fontSize: 9,
-		fontWeight: '600',
-		marginBottom: 1,
-	},
-	selectOval: {
-		width: 36,
-		height: 10,
-		borderRadius: 20,
-		backgroundColor: 'rgba(238, 85, 85, 0.55)',
-		borderWidth: 1.5,
-		borderColor: '#e55',
-		marginTop: 2,
-	},
-	eliteInner: {
-		flexDirection: 'row',
-		alignItems: 'center',
-		gap: 8,
-	},
-	eliteSpriteCol: {
-		alignItems: 'center',
 	},
 });
