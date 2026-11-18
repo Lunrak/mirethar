@@ -89,10 +89,14 @@ function buildFeedback(
 	before: CombatState,
 	after: CombatState,
 	actionType: string,
+	actionName?: string,
 ): CombatFeedbackData {
 	const lastMsg = after.log[after.log.length - 1]?.message ?? '';
 	const actorId = before.currentActorId;
 	const targetId = before.selectedTargetId;
+	const actor =
+		before.heroes.find((h) => h.id === actorId) ??
+		before.enemies.find((e) => e.id === actorId);
 
 	const enemyDelta = sumEnemyLife(before.enemies) - sumEnemyLife(after.enemies);
 	const heroDelta = sumHeroLife(after.heroes) - sumHeroLife(before.heroes);
@@ -180,10 +184,25 @@ function initFromConfig(config: CombatSessionConfig = {}): {
 		(config.enemies ? null : generateEncounter(encounterType));
 	const enemies = config.enemies ?? encounter?.enemies ?? [];
 	const positions = config.positions;
-	const state = createCombat(party, enemies, positions, {
-		ambush: config.ambush,
-		ambushFrontOnly: config.ambush,
-	});
+	let state = createCombat(party, enemies, positions);
+	if (config.ambush) {
+		state = {
+			...state,
+			phase: 'enemyTurn',
+			currentActorId: null,
+			ambush: true,
+			ambushFrontOnly: true,
+			log: [
+				{
+					id: `log_ambush_${Date.now().toString(36)}`,
+					message:
+						'¡Emboscada! Los enemigos atacan primero (solo frente de marcha).',
+					timestamp: Date.now(),
+				},
+				...state.log,
+			],
+		};
+	}
 	return { state, encounter, encounterType };
 }
 
