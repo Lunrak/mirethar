@@ -30,6 +30,10 @@ import {
 } from '../../../core/rules/BribeService';
 
 import { DungeonMapView } from '../components/DungeonMapView';
+import {
+	DungeonRevealOverlay,
+	type RevealFlash,
+} from '../components/DungeonRevealOverlay';
 
 type Props = {
 	onBack?: () => void;
@@ -58,6 +62,7 @@ export default function DungeonScreen({
 		useState<EncounterResult | null>(null);
 	const [pendingAmbush, setPendingAmbush] = useState(false);
 	const [questOffer, setQuestOffer] = useState<ActiveQuest | null>(null);
+	const [revealFlash, setRevealFlash] = useState<RevealFlash | null>(null);
 
 	const start = (entranceId: number) => {
 		const m = createDungeon(entranceId);
@@ -90,6 +95,13 @@ export default function DungeonScreen({
 			setQuestOffer(result.pendingQuestOffer);
 		}
 		setLog((prev) => [...prev, result.message].slice(-12));
+		if (result.revealWord) {
+			setRevealFlash({
+				id: `rev_${Date.now().toString(36)}`,
+				word: result.revealWord,
+				subtitle: result.revealSubtitle ?? undefined,
+			});
+		}
 	};
 
 	const handleSelectCell = (cellId: string) => {
@@ -198,6 +210,11 @@ export default function DungeonScreen({
 					<Text style={styles.backText}>Nueva</Text>
 				</Pressable>
 			</View>
+
+			<DungeonRevealOverlay
+				flash={revealFlash}
+				onDone={() => setRevealFlash(null)}
+			/>
 
 			<View style={styles.body}>
 				<View style={styles.mapPane}>

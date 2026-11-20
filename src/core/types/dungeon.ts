@@ -86,6 +86,9 @@ export type GenerateResult = {
   pendingQuestOffer?: import('./quest').ActiveQuest | null;
   /** true si el encuentro pendiente es emboscada al revisitar */
   ambushEncounter?: boolean;
+  /** Palabra única para overlay al revelar */
+  revealWord?: string | null;
+  revealSubtitle?: string | null;
 };
 
 export const DIR_DELTA: Record<Dir, { dx: number; dy: number }> = {

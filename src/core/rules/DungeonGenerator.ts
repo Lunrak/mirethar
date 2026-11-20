@@ -30,6 +30,7 @@ import {
   resolveCellContent,
   applyContentToCell,
   formatContentLog,
+  contentWord,
 } from './RoomContentsService';
 import type { ResolvedContent } from './RoomContentsService';
 import {
@@ -314,6 +315,8 @@ export function openDoor(
   const contentLogs: string[] = [];
   let pendingEncounter: ResolvedContent | null = null;
   let pendingQuestOffer: import('../types/quest').ActiveQuest | null = null;
+  let revealWord: string | null = null;
+  let revealSubtitle: string | null = null;
   let quests = getQuests(map);
 
   for (const off of shape.offsets) {
@@ -337,6 +340,8 @@ export function openDoor(
       const resolved = resolveCellContent(off.kind, rng);
       cell = applyContentToCell(cell, resolved);
       contentLogs.push(formatContentLog(resolved));
+      revealWord = contentWord(resolved);
+      revealSubtitle = shape.label;
       if (resolved.encounter) pendingEncounter = resolved;
 
       if (shouldOfferQuest(off.kind, resolved.kind, quests, id, rng)) {
@@ -419,6 +424,8 @@ export function openDoor(
     message: `Abrís la puerta (${door.dir}): aparece ${shape.label}.${contentMsg}${questMsg}`,
     pendingEncounter: pendingEncounter?.encounter ?? null,
     pendingQuestOffer,
+    revealWord,
+    revealSubtitle,
   };
 }
 

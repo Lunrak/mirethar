@@ -127,3 +127,32 @@ export function formatContentLog(resolved: ResolvedContent): string {
 }
 
 export { mapKindToCellContent };
+
+
+/** Una sola palabra para el overlay de revelación */
+export function contentWord(resolved: ResolvedContent): string {
+  switch (resolved.kind) {
+    case 'empty':
+      return 'Vacío';
+    case 'encounter':
+      return resolved.encounter?.type === 'boss'
+        ? 'Jefe'
+        : resolved.encounter?.type === 'weird'
+          ? 'Extraño'
+          : resolved.encounter?.type === 'vermin'
+            ? 'Vermin'
+            : 'Enemigos';
+    case 'treasure':
+      return 'Tesoro';
+    case 'trap':
+      return 'Trampa';
+    case 'stairs_down':
+      return 'Escaleras';
+    case 'hazard':
+      return 'Peligro';
+    case 'special':
+      return 'Especial';
+    default:
+      return resolved.label.split(' ')[0] || 'Zona';
+  }
+}
