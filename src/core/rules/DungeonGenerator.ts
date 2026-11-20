@@ -324,85 +324,129 @@ export function openDoor(
   let revealSubtitle: string | null = null;
   let quests = getQuests(map);
 
+  // Una sola pieza: un regionId, un contenido para todo el pasillo/sala
+  const regionId = uid('region');
+  const shapeKind: CellKind = shape.kind;
+  const resolved = resolveCellContent(shapeKind, rng);
+  contentLogs.push(formatContentLog(resolved));
+  revealWord = contentWord(resolved);
+  revealSubtitle = shape.label;
+
+  if (resolved.encounter) pendingEncounter = resolved;
+
+  // Jefe final (misma lógica, una vez por pieza)
+  const isBossContent =
+    resolved.kind === 'encounter' &&
+    (resolved.encounter?.type === 'boss' || resolved.row.encounterType === 'boss');
+  const forceFinalNoDoors =
+    !hasUnexploredDoors({ ...map, cells, doors }) &&
+    resolved.kind === 'encounter';
+
+  if (isBossContent || forceFinalNoDoors) {
+    const { encounter, isFinal, rollInfo } = generateBossEncounterForMap(
+      { ...map, cells, doors, bossesFound: map.bossesFound },
+      rng,
+      { forceFinal: forceFinalNoDoors },
+    );
+    pendingEncounter = {
+      ...resolved,
+      kind: 'encounter',
+      label: isFinal ? 'Jefe final' : resolved.label,
+      encounter,
+    };
+    revealWord = isFinal
+      ? 'Jefe final'
+      : contentWord({ ...resolved, encounter });
+    if (rollInfo) {
+      contentLogs.push(
+        isFinal
+          ? `Jefe final (d6=${rollInfo.roll}+${rollInfo.bossesBefore}=${rollInfo.total}${forceFinalNoDoors ? ', sin puertas' : ''})`
+          : `Jefe normal (d6=${rollInfo.roll}+${rollInfo.bossesBefore}=${rollInfo.total})`,
+      );
+    }
+  }
+
+  if (shouldOfferQuest(shapeKind, resolved.kind, quests, cellKey(originX, originY), rng)) {
+    const offerId = cellKey(originX, originY);
+    pendingQuestOffer = rollAndAcceptQuest(offerId, rng);
+    contentLogs.push(
+      `PNJ ${pendingQuestOffer.giverName} ofrece: «${pendingQuestOffer.title}»`,
+    );
+  }
+
+  if (shapeKind === 'room') {
+    quests = advanceAllQuests(quests, 'explore_rooms');
+  }
+  if (resolved.kind === 'treasure') {
+    quests = advanceAllQuests(quests, 'find_treasure');
+  }
+
+  // Casillas de la pieza (solo forma); mismo contenido y regionId
+  const regionKeys = new Set<string>();
   for (const off of shape.offsets) {
     const { x, y } = worldPos(originX, originY, off.x, off.y);
     const id = cellKey(x, y);
-    if (occupied(cells, x, y)) {
-      continue;
-    }
+    if (occupied(cells, x, y)) continue;
+    if (!inBounds(x, y)) continue;
+    regionKeys.add(id);
     let cell: MapCell = {
       id,
       x,
       y,
       kind: off.kind,
       content: 'unknown',
-      doors: [...off.doors],
+      doors: [],
       revealed: true,
       label: shape.label,
+      regionId,
     };
-    // Solo la primera casilla nueva resuelve contenido de la zona
-    if (newCellIds.length === 0) {
-      const resolved = resolveCellContent(off.kind, rng);
-      cell = applyContentToCell(cell, resolved);
-      contentLogs.push(formatContentLog(resolved));
-      revealWord = contentWord(resolved);
-      revealSubtitle = shape.label;
-      if (resolved.encounter) pendingEncounter = resolved;
-
-      // Jefe: tirada de jefe final (o forzar si no quedan puertas)
-      const isBossContent =
-        resolved.kind === 'encounter' &&
-        (resolved.encounter?.type === 'boss' || resolved.row.encounterType === 'boss');
-      const forceFinalNoDoors =
-        !hasUnexploredDoors({ ...map, cells, doors }) &&
-        resolved.kind === 'encounter';
-
-      if (isBossContent || forceFinalNoDoors) {
-        const { encounter, isFinal, rollInfo } = generateBossEncounterForMap(
-          { ...map, cells, doors, bossesFound: map.bossesFound },
-          rng,
-          { forceFinal: forceFinalNoDoors },
-        );
-        pendingEncounter = {
-          ...resolved,
-          kind: 'encounter',
-          label: isFinal ? 'Jefe final' : resolved.label,
-          encounter,
-        };
-        revealWord = isFinal
-          ? 'Jefe final'
-          : contentWord({ ...resolved, encounter });
-        if (rollInfo) {
-          contentLogs.push(
-            isFinal
-              ? `Jefe final (d6=${rollInfo.roll}+${rollInfo.bossesBefore}=${rollInfo.total}${forceFinalNoDoors ? ', sin puertas' : ''})`
-              : `Jefe normal (d6=${rollInfo.roll}+${rollInfo.bossesBefore}=${rollInfo.total})`,
-          );
-        }
-      }
-
-      if (shouldOfferQuest(off.kind, resolved.kind, quests, id, rng)) {
-        pendingQuestOffer = rollAndAcceptQuest(id, rng);
-        contentLogs.push(
-          `PNJ ${pendingQuestOffer.giverName} ofrece: «${pendingQuestOffer.title}»`,
-        );
-      }
-
-      // Progreso en todas las misiones activas
-      if (off.kind === 'room') {
-        quests = advanceAllQuests(quests, 'explore_rooms');
-      }
-      if (resolved.kind === 'treasure') {
-        quests = advanceAllQuests(quests, 'find_treasure');
-      }
-    } else {
-      cell = { ...cell, content: 'empty', label: shape.label };
-    }
+    cell = applyContentToCell(cell, resolved);
+    cell = { ...cell, regionId, label: shape.label };
     cells[id] = cell;
     newCellIds.push(id);
   }
 
-  // Abrir puerta cuenta para misiones de cartografiar
+  // Puertas solo en el contorno de la pieza (hacia fuera), no entre casillas del mismo pasillo/sala
+  for (const id of regionKeys) {
+    const cell = cells[id];
+    if (!cell) continue;
+    const exteriorDirs: Dir[] = [];
+    for (const dir of ['N', 'E', 'S', 'W'] as Dir[]) {
+      const { dx, dy } = DIR_DELTA[dir];
+      const nx = cell.x + dx;
+      const ny = cell.y + dy;
+      const nid = cellKey(nx, ny);
+      // Hacia otra casilla de la misma pieza → no hay puerta
+      if (regionKeys.has(nid)) continue;
+      // Fuera de mapa → no puerta
+      if (!inBounds(nx, ny)) continue;
+      // Ya hay celda revelada de otra pieza → conexión abierta, sin puerta nueva
+      if (cells[nid]?.revealed) continue;
+      exteriorDirs.push(dir);
+    }
+    // Limitar salidas: pasillo suele 1 hacia adelante; salas hasta 2–3
+    const maxDoors =
+      shapeKind === 'corridor' ? 1 : exteriorDirs.length > 3 ? 3 : exteriorDirs.length;
+    // Preferir dirección "forward" (la de la puerta de origen)
+    const preferred = door.dir;
+    exteriorDirs.sort((a, b) =>
+      a === preferred ? -1 : b === preferred ? 1 : 0,
+    );
+    const chosen = exteriorDirs.slice(0, Math.max(0, maxDoors));
+    cells[id] = { ...cell, doors: chosen };
+  }
+
+  // La puerta de entrada (origen) ya conecta; no duplicar hacia atrás en la primera casilla
+  const entryId = cellKey(originX, originY);
+  if (cells[entryId]) {
+    const back = OPPOSITE[door.dir];
+    cells[entryId] = {
+      ...cells[entryId],
+      doors: (cells[entryId].doors ?? []).filter((d) => d !== back),
+    };
+  }
+
+    // Abrir puerta cuenta para misiones de cartografiar
   quests = advanceAllQuests(quests, 'open_doors');
 
   const firstId = cellKey(originX, originY);

@@ -46,6 +46,11 @@ export type MapCell = {
   /** Etiqueta corta para UI */
   label?: string;
   /**
+   * Pieza de mapa (pasillo/sala): todas las casillas del mismo regionId
+   * comparten un solo contenido; las casillas solo dibujan la forma.
+   */
+  regionId?: string;
+  /**
    * Acuerdo / botín de monstruos en esta casilla:
    * sobornos acumulados se recuperan al derrotarlos.
    */
