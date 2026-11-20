@@ -15,8 +15,14 @@ import {
 	finalBossMagicItemCount,
 	tryCompleteAdventure,
 } from './src/core/rules/FinalBossService';
+import {
+	applyEncounterXp,
+	emptyXpBank,
+	type EncounterXpKind,
+} from './src/core/rules/XpService';
+import { LevelUpScreen } from './src/modules/combat';
 
-type Mode = 'menu' | 'combat' | 'dungeon' | 'dungeonCombat';
+type Mode = 'menu' | 'combat' | 'dungeon' | 'dungeonCombat' | 'levelUp';
 
 type PendingDungeonCombat = {
 	map: DungeonMap;
@@ -39,10 +45,18 @@ export default function App() {
 			ambush?: boolean;
 			log?: string[];
 		}) => {
-			setDungeonMap(payload.map);
+			let mapForCombat = payload.map;
+			if (!mapForCombat.partyHeroes || mapForCombat.partyHeroes.length === 0) {
+				mapForCombat = {
+					...mapForCombat,
+					partyHeroes: createDefaultParty(),
+					xpBank: mapForCombat.xpBank ?? emptyXpBank(),
+				};
+			}
+			setDungeonMap(mapForCombat);
 			if (payload.log) setDungeonLog(payload.log);
 			setPending({
-				map: payload.map,
+				map: mapForCombat,
 				encounter: payload.encounter,
 				ambush: payload.ambush,
 				log: payload.log ?? dungeonLog,
@@ -61,6 +75,9 @@ export default function App() {
 			}
 			let map = pending.map;
 			const victory = session.state.result === 'victory';
+			// Conservar héroes (caídos/muertos/carga de cuerpos) en el mapa
+			map = { ...map, partyHeroes: session.state.heroes };
+
 			if (victory) {
 				map = noteClearedDungeon(map);
 				const wasFinal =
@@ -79,6 +96,14 @@ export default function App() {
 				if (wasFinal) {
 					map = markFinalBossDefeated(map);
 				}
+				let kind: EncounterXpKind = 'minion';
+				if (wasFinal) kind = 'final_boss';
+				else if (pending.encounter.type === 'boss') kind = 'boss';
+				else if (pending.encounter.type === 'weird') kind = 'weird';
+				else if (pending.encounter.type === 'vermin') kind = 'vermin';
+				else kind = 'minion';
+				const xp = applyEncounterXp(map.xpBank ?? emptyXpBank(), kind);
+				map = { ...map, xpBank: xp.bank };
 				const claim = claimVictory(map, map.partyCellId, {
 					gold: normalGold,
 					items,
@@ -88,6 +113,7 @@ export default function App() {
 					[
 						...prev,
 						wasFinal ? '¡Jefe final derrotado!' : 'Victoria en combate.',
+						xp.message,
 						claim.message,
 						wasFinal
 							? 'Volved a la entrada de la mazmorra para terminar la aventura.'
@@ -97,6 +123,7 @@ export default function App() {
 						.slice(-12),
 				);
 			} else {
+				map = { ...map, partyHeroes: session.state.heroes };
 				setDungeonLog((prev) =>
 					[...prev, 'Derrota o retirada — volvéis al mapa.'].slice(-12),
 				);
@@ -109,7 +136,10 @@ export default function App() {
 	);
 
 	if (mode === 'dungeonCombat' && pending) {
-		const heroes = createDefaultParty();
+		const heroes =
+			dungeonMap?.partyHeroes && dungeonMap.partyHeroes.length > 0
+				? dungeonMap.partyHeroes
+				: createDefaultParty();
 		const config: CombatSessionConfig = {
 			heroes,
 			enemies: pending.encounter.enemies,
@@ -146,6 +176,31 @@ export default function App() {
 		);
 	}
 
+	if (mode === 'levelUp') {
+		const fromMap = dungeonMap;
+		if (!fromMap) {
+			return null;
+		}
+		const party =
+			fromMap.partyHeroes && fromMap.partyHeroes.length > 0
+				? fromMap.partyHeroes
+				: [];
+		return (
+			<LevelUpScreen
+				heroes={party}
+				bank={fromMap.xpBank ?? emptyXpBank()}
+				onChange={(heroesNext, bankNext) => {
+					setDungeonMap({
+						...fromMap,
+						partyHeroes: heroesNext,
+						xpBank: bankNext,
+					});
+				}}
+				onClose={() => setMode('dungeon')}
+			/>
+		);
+	}
+
 	if (mode === 'dungeon') {
 		return (
 			<DungeonScreen
@@ -156,6 +211,7 @@ export default function App() {
 				initialMap={dungeonMap}
 				resumeLog={dungeonLog}
 				onEncounter={openDungeonCombat}
+				onOpenLevelUp={() => setMode('levelUp')}
 			/>
 		);
 	}

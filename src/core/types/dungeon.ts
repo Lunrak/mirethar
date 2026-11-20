@@ -92,6 +92,8 @@ export type DungeonMap = {
   abandonedBodies?: AbandonedBody[];
   /** Héroes de la expedición (para cuerpos / carga) */
   partyHeroes?: import('./combat').Hero[];
+  /** Banco de XP del grupo */
+  xpBank?: import('../rules/XpService').XpBank;
 };
 
 export type GenerateResult = {

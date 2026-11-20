@@ -4,7 +4,14 @@
  */
 
 import { finalizeFallenHeroes, getHeroStatus } from './HeroStatus';
-import { awardBossXp, awardWeirdXp, rollXpForHero, type XpAward, type XpRollResult } from './XpService';
+import {
+  awardBossXp,
+  awardWeirdXp,
+  awardFinalBossXp,
+  awardMinionXp,
+  type XpAward,
+  type XpRollResult,
+} from './XpService';
 import { rollTreasure, type TreasureResult } from './TreasureService';
 import type { CombatState, EnemyTemplate, Hero } from '../types/combat';
 
@@ -35,8 +42,8 @@ export type CombatResultsSummary = {
 export type BuildResultsOptions = {
   /** Plantilla del encuentro (para botín y tipo de XP) */
   encounterTemplate?: Pick<EnemyTemplate, 'name' | 'type' | 'treasureModifier'> | null;
-  /** Héroe elegido para tirar XP (por defecto el primero vivo / herido) */
-  xpHeroId?: string | null;
+  /** Jefe final de mazmorra */
+  isFinalBoss?: boolean;
   rng?: () => number;
 };
 
@@ -48,7 +55,7 @@ export function buildCombatResults(
   state: CombatState,
   opts: BuildResultsOptions = {}
 ): CombatResultsSummary {
-  const { encounterTemplate = null, xpHeroId = null, rng } = opts;
+  const { encounterTemplate = null, isFinalBoss = false, rng } = opts;
 
   // Asegurar caídos → muertos al cerrar
   let heroes = state.heroes.map((h) => ({ ...h }));
@@ -82,23 +89,17 @@ export function buildCombatResults(
   let xpRoll: XpRollResult | null = null;
 
   if (result === 'victory' && encounterTemplate) {
-    if (encounterTemplate.type === 'boss') {
+    if (isFinalBoss || encounterTemplate.name?.includes('Jefe final')) {
+      xpAward = awardFinalBossXp();
+    } else if (encounterTemplate.type === 'boss') {
       xpAward = awardBossXp();
     } else if (encounterTemplate.type === 'weird') {
       xpAward = awardWeirdXp();
+    } else if (encounterTemplate.type === 'minion') {
+      xpAward = awardMinionXp();
     }
-    // minion/vermin: sin tirada inmediata en MVP (tally fuera de alcance)
-
-    if (xpAward && xpAward.rolls > 0) {
-      const pool = heroes.filter((h) => !h.isDead);
-      const pick =
-        (xpHeroId && pool.find((h) => h.id === xpHeroId)) ||
-        pool[0] ||
-        heroes[0];
-      if (pick) {
-        xpRoll = rollXpForHero(pick, rng);
-      }
-    }
+    // vermin: sin XP; la subida de nivel es manual en pantalla de party
+    xpRoll = null;
   }
 
   // Botín solo en victoria
