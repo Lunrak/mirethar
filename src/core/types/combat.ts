@@ -39,6 +39,8 @@ export type EnemyInstance = {
 	isUndead?: boolean;
 	/** Huyó por moral (animación + fuera de combate) */
 	fled?: boolean;
+	/** Jefe final de la mazmorra procedural */
+	isFinalBoss?: boolean;
 };
 
 export type CombatPosition = { front: string[]; rear: string[] };

@@ -20,6 +20,8 @@ export type EncounterResult = {
   enemies: EnemyInstance[];
   /** Cantidad generada (útil para tests y log) */
   quantity: number;
+  /** Encuentro marcado como jefe final de la mazmorra */
+  isFinalBoss?: boolean;
 };
 
 /** Mapa de fórmulas de cantidad por id de template (según 4AD) */

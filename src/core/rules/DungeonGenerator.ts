@@ -23,6 +23,11 @@ import {
 } from '../types/dungeon';
 import { rollD6 } from './DiceService';
 import { generateEncounter, type EncounterResult } from './EncounterGenerator';
+import {
+  generateBossEncounterForMap,
+  hasUnexploredDoors,
+} from './FinalBossService';
+
 import { ensureMonsterDeal } from './BribeService';
 
 
@@ -344,6 +349,38 @@ export function openDoor(
       revealSubtitle = shape.label;
       if (resolved.encounter) pendingEncounter = resolved;
 
+      // Jefe: tirada de jefe final (o forzar si no quedan puertas)
+      const isBossContent =
+        resolved.kind === 'encounter' &&
+        (resolved.encounter?.type === 'boss' || resolved.row.encounterType === 'boss');
+      const forceFinalNoDoors =
+        !hasUnexploredDoors({ ...map, cells, doors }) &&
+        resolved.kind === 'encounter';
+
+      if (isBossContent || forceFinalNoDoors) {
+        const { encounter, isFinal, rollInfo } = generateBossEncounterForMap(
+          { ...map, cells, doors, bossesFound: map.bossesFound },
+          rng,
+          { forceFinal: forceFinalNoDoors },
+        );
+        pendingEncounter = {
+          ...resolved,
+          kind: 'encounter',
+          label: isFinal ? 'Jefe final' : resolved.label,
+          encounter,
+        };
+        revealWord = isFinal
+          ? 'Jefe final'
+          : contentWord({ ...resolved, encounter });
+        if (rollInfo) {
+          contentLogs.push(
+            isFinal
+              ? `Jefe final (d6=${rollInfo.roll}+${rollInfo.bossesBefore}=${rollInfo.total}${forceFinalNoDoors ? ', sin puertas' : ''})`
+              : `Jefe normal (d6=${rollInfo.roll}+${rollInfo.bossesBefore}=${rollInfo.total})`,
+          );
+        }
+      }
+
       if (shouldOfferQuest(off.kind, resolved.kind, quests, id, rng)) {
         pendingQuestOffer = rollAndAcceptQuest(id, rng);
         contentLogs.push(
@@ -401,6 +438,14 @@ export function openDoor(
   }
 
   // Quitar de la celda origen la puerta ya abierta de la lista lógica (opcional)
+  let bossesFound = map.bossesFound ?? 0;
+  let finalBossSpawned = map.finalBossSpawned ?? false;
+  const bossEnc = pendingEncounter?.encounter;
+  if (bossEnc && (bossEnc.type === 'boss' || bossEnc.isFinalBoss)) {
+    bossesFound += 1;
+    if (bossEnc.isFinalBoss) finalBossSpawned = true;
+  }
+
   const next: DungeonMap = {
     ...map,
     cells,
@@ -408,7 +453,33 @@ export function openDoor(
     partyCellId: cells[firstId]?.id ?? map.partyCellId,
     quests,
     activeQuest: quests.find((q) => q.status !== 'completed') ?? null,
+    bossesFound,
+    finalBossSpawned,
   };
+
+  // Si no quedan puertas en todo el mapa y aún no hay jefe final → esta sala es el jefe final
+  let outEncounter = pendingEncounter?.encounter ?? null;
+  let outReveal = revealWord;
+  let outMap = next;
+  if (
+    !outMap.finalBossSpawned &&
+    !hasUnexploredDoors(outMap) &&
+    !(outEncounter?.isFinalBoss)
+  ) {
+    const { encounter, rollInfo } = generateBossEncounterForMap(outMap, rng, {
+      forceFinal: true,
+    });
+    outEncounter = encounter;
+    outReveal = 'Jefe final';
+    outMap = {
+      ...outMap,
+      bossesFound: (outMap.bossesFound ?? 0) + (outEncounter ? 1 : 0),
+      finalBossSpawned: true,
+    };
+    contentLogs.push(
+      `Sin más puertas — jefe final (forzado${rollInfo ? `, d6=${rollInfo.roll}` : ''})`,
+    );
+  }
 
   const contentMsg = contentLogs.length
     ? ` Contenido: ${contentLogs.join(' | ')}`
@@ -419,12 +490,12 @@ export function openDoor(
     : '';
 
   return {
-    map: next,
+    map: outMap,
     newCellIds,
     message: `Abrís la puerta (${door.dir}): aparece ${shape.label}.${contentMsg}${questMsg}`,
-    pendingEncounter: pendingEncounter?.encounter ?? null,
+    pendingEncounter: outEncounter,
     pendingQuestOffer,
-    revealWord,
+    revealWord: outReveal,
     revealSubtitle,
   };
 }

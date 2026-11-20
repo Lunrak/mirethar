@@ -28,6 +28,7 @@ import {
 	bribeDemandText,
 	ensureMonsterDeal,
 } from '../../../core/rules/BribeService';
+import { tryCompleteAdventure } from '../../../core/rules/FinalBossService';
 
 import { DungeonMapView } from '../components/DungeonMapView';
 import {
@@ -107,7 +108,15 @@ export default function DungeonScreen({
 	const handleSelectCell = (cellId: string) => {
 		if (!map) return;
 		const result = movePartyTo(map, cellId);
-		setMap(result.map);
+		let nextMap = result.map;
+		const fin = tryCompleteAdventure(nextMap);
+		nextMap = fin.map;
+		setMap(nextMap);
+		if (fin.completed) {
+			setLog((prev) => [...prev, fin.message].slice(-12));
+		} else if (fin.message && nextMap.finalBossDefeated) {
+			setLog((prev) => [...prev, fin.message].slice(-12));
+		}
 		if (result.ambush) {
 			const label = `${result.ambush.template.name} ×${result.ambush.quantity}`;
 			const withDeal = ensureMonsterDeal(
@@ -215,6 +224,14 @@ export default function DungeonScreen({
 				flash={revealFlash}
 				onDone={() => setRevealFlash(null)}
 			/>
+			{map.adventureComplete && (
+				<View style={styles.completeBanner}>
+					<Text style={styles.completeText}>Aventura completada</Text>
+					<Text style={styles.muted}>
+						Jefe final derrotado · Habéis salido por la entrada
+					</Text>
+				</View>
+			)}
 
 			<View style={styles.body}>
 				<View style={styles.mapPane}>

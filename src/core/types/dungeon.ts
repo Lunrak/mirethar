@@ -72,6 +72,14 @@ export type DungeonMap = {
   lootItems?: string[];
   /** Marcas de XP de recompensa */
   xpMarks?: string[];
+  /** Jefes encontrados en este mapa (para tirada de jefe final) */
+  bossesFound?: number;
+  /** Ya surgió el jefe final */
+  finalBossSpawned?: boolean;
+  /** Jefe final derrotado */
+  finalBossDefeated?: boolean;
+  /** Aventura procedural terminada (jefe final muerto + vuelta a entrada) */
+  adventureComplete?: boolean;
 };
 
 export type GenerateResult = {
