@@ -2,7 +2,7 @@
  * Hook de sesión de combate – conecta UI con core (TurnManager + StateManager)
  */
 
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   createCombat,
   selectAction,
@@ -330,6 +330,27 @@ export function useCombatSession(config: CombatSessionConfig | EncounterType = '
       return next;
     });
   }, [pendingResult, syncDiceFromState]);
+
+
+  // Auto-resolver turno enemigo (emboscada o tras ronda de héroes)
+  useEffect(() => {
+    if (state.isFinished) return;
+    if (state.phase !== 'enemyTurn') return;
+    if (diceUi === 'spinning' || diceUi === 'result') return;
+
+    const timer = setTimeout(() => {
+      setState((prev) => {
+        if (prev.phase !== 'enemyTurn' || prev.isFinished) return prev;
+        const next = runEnemyTurn(prev);
+        setDiceUi(syncDiceFromState(next, 'idle'));
+        setLastFeedback(null);
+        setFocusActorId(null);
+        setFocusTargetId(null);
+        return next;
+      });
+    }, 400);
+    return () => clearTimeout(timer);
+  }, [state.phase, state.isFinished, state.round, diceUi, syncDiceFromState]);
 
   return {
     state,
