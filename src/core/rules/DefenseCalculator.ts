@@ -164,6 +164,28 @@ export function resolveDefense(
   /** Algunos monstruos infligen 2 heridas (Ogre, etc.) */
   woundsOnHit: number = 1
 ): DefenseResult {
+  // Cargar un compañero caído: no hay tirada de defensa; los golpes aciertan siempre
+  if (hero.carryingBodyId) {
+    return {
+      dice: { raw: 1, explosive: [], total: 1, isExplosive: false },
+      modifiers: {
+        armorMod: 0,
+        shieldMod: 0,
+        classMod: 0,
+        racialMod: 0,
+        situationalMod: 0,
+        total: 0,
+        notes: ['Cargando cuerpo: sin defensa'],
+      },
+      finalValue: 0,
+      monsterLevel,
+      success: false,
+      forced: 'failure',
+      damageTaken: woundsOnHit,
+      message: `${hero.name} carga un cuerpo y no puede defenderse → golpe automático (−${woundsOnHit} life)`,
+    };
+  }
+
   const dice = rollWithExplosiveSix(ctx.rng);
   const modifiers = computeDefenseModifiers(hero, ctx);
   const finalValue = dice.total + modifiers.total;

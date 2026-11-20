@@ -27,6 +27,8 @@ export type CombatAction =
         heroes: Hero[];
         enemies: EnemyInstance[];
         positions?: { front: string[]; rear: string[] };
+        ambush?: boolean;
+        ambushFrontOnly?: boolean;
       };
     }
   | { type: 'SELECT_ACTION'; payload: Action }
@@ -94,24 +96,35 @@ export const initialCombatState: CombatState = {
 export function combatReducer(state: CombatState, action: CombatAction): CombatState {
   switch (action.type) {
     case 'CREATE_COMBAT': {
-      const { heroes, enemies, positions } = action.payload;
+      const { heroes, enemies, positions, ambush, ambushFrontOnly } = action.payload;
       const heroTurnOrder = buildHeroTurnOrder(heroes);
       const firstHeroId = heroTurnOrder[0] ?? null;
+      const pos = positions ?? {
+        front: heroes.slice(0, 2).map((h) => h.id),
+        rear: heroes.slice(2).map((h) => h.id),
+      };
 
       const base = {
         id: `combat_${Date.now().toString(36)}`,
         round: 1,
-        currentActorId: firstHeroId,
-        phase: (firstHeroId ? 'heroTurn' : 'ended') as CombatPhase,
+        currentActorId: ambush ? null : firstHeroId,
+        phase: (ambush
+          ? 'enemyTurn'
+          : firstHeroId
+            ? 'heroTurn'
+            : 'ended') as CombatPhase,
         heroes: heroes.map((h) => ({ ...h })),
         enemies: enemies.map((e) => ({ ...e })),
-        positions: positions ?? {
-          front: heroes.slice(0, 2).map((h) => h.id),
-          rear: heroes.slice(2).map((h) => h.id),
-        },
+        positions: pos,
         selectedAction: null,
         selectedTargetId: null,
-        log: [createLogEntry('Combate iniciado')],
+        log: [
+          createLogEntry(
+            ambush
+              ? '¡Emboscada! Los enemigos atacan primero (solo frente de marcha).'
+              : 'Combate iniciado',
+          ),
+        ],
         isFinished: false,
         result: null as 'victory' | 'defeat' | null,
         heroTurnOrder,
@@ -121,6 +134,8 @@ export function combatReducer(state: CombatState, action: CombatAction): CombatS
           acc[e.templateId] = (acc[e.templateId] ?? 0) + 1;
           return acc;
         }, {}),
+        ambush: !!ambush,
+        ambushFrontOnly: !!(ambushFrontOnly ?? ambush),
       };
       // Miradas Medusa / Catoblepas al inicio
       let opened = applyOpeningToCombatState(base);
@@ -278,11 +293,18 @@ export function combatReducer(state: CombatState, action: CombatAction): CombatS
 export function createCombat(
   heroes: Hero[],
   enemies: EnemyInstance[],
-  positions?: { front: string[]; rear: string[] }
+  positions?: { front: string[]; rear: string[] },
+  opts?: { ambush?: boolean; ambushFrontOnly?: boolean },
 ): CombatState {
   return combatReducer(initialCombatState, {
     type: 'CREATE_COMBAT',
-    payload: { heroes, enemies, positions },
+    payload: {
+      heroes,
+      enemies,
+      positions,
+      ambush: opts?.ambush,
+      ambushFrontOnly: opts?.ambushFrontOnly ?? opts?.ambush,
+    },
   });
 }
 

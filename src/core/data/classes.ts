@@ -136,7 +136,9 @@ export function createHero(
   }
 
   return {
-    id: options.id ?? `${heroClass}_${Date.now().toString(36)}`,
+    id:
+      options.id ??
+      `${heroClass}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 7)}`,
     name: options.name ?? DEFAULT_NAMES[heroClass],
     class: heroClass,
     level,

@@ -52,6 +52,14 @@ export type MapCell = {
   monsterDeal?: import('./stash').CellMonsterDeal;
 };
 
+/** Cuerpo dejado en una casilla (p. ej. en la entrada) */
+export type AbandonedBody = {
+  heroId: string;
+  heroName: string;
+  equipmentSlots: Record<string, import('../data/items').Item | undefined>;
+  leftAtCellId: string;
+};
+
 export type DungeonMap = {
   id: string;
   /** 1–6 según el mapa de entrada elegido */
@@ -80,6 +88,10 @@ export type DungeonMap = {
   finalBossDefeated?: boolean;
   /** Aventura procedural terminada (jefe final muerto + vuelta a entrada) */
   adventureComplete?: boolean;
+  /** Cuerpos abandonados en casillas */
+  abandonedBodies?: AbandonedBody[];
+  /** Héroes de la expedición (para cuerpos / carga) */
+  partyHeroes?: import('./combat').Hero[];
 };
 
 export type GenerateResult = {

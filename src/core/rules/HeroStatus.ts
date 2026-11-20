@@ -10,7 +10,7 @@
  * (carryingBodyId). En el MVP se expone la API; el flujo de mazmorra lo usará después.
  */
 
-import type { CombatState, Hero } from '../types/combat';
+import type { CombatState, CombatPosition, Hero, Item } from '../types/combat';
 
 export type HeroStatusKind = 'alive' | 'wounded' | 'fallen' | 'dead';
 
@@ -182,5 +182,92 @@ export function finalizeCombatHeroes(state: CombatState): CombatState {
     ...state,
     heroes: finalized,
     log: [...state.log, ...deathLogs],
+  };
+}
+
+
+
+/**
+ * Acceder al inventario de un compañero caído (cuesta el turno en combate).
+ * Transfiere todo el equipo del caído a una lista de botín recuperado.
+ */
+export function scavengeFallenInventory(
+  heroes: Hero[],
+  actorId: string,
+  fallenId: string,
+): {
+  heroes: Hero[];
+  looted: Item[];
+  ok: boolean;
+  message: string;
+} {
+  const actor = heroes.find((h) => h.id === actorId);
+  const fallen = heroes.find((h) => h.id === fallenId);
+  if (!actor || !fallen) {
+    return { heroes, looted: [], ok: false, message: 'Héroe no encontrado.' };
+  }
+  if (!isCombatCapable(actor)) {
+    return { heroes, looted: [], ok: false, message: `${actor.name} no puede actuar.` };
+  }
+  if (!fallen.isFallen && fallen.life > 0 && !fallen.isDead) {
+    return { heroes, looted: [], ok: false, message: `${fallen.name} no está caído.` };
+  }
+
+  const looted: Item[] = [];
+  const emptyEq: Hero['equipment'] = {};
+  for (const [slot, item] of Object.entries(fallen.equipment ?? {})) {
+    if (item) looted.push(item as Item);
+  }
+
+  const next = heroes.map((h) => {
+    if (h.id === fallenId) {
+      return { ...h, equipment: emptyEq };
+    }
+    return h;
+  });
+
+  return {
+    heroes: next,
+    looted,
+    ok: true,
+    message:
+      looted.length > 0
+        ? `${actor.name} registra a ${fallen.name} y recupera: ${looted.map((i) => i.name).join(', ')}.`
+        : `${actor.name} registra a ${fallen.name}: inventario vacío.`,
+  };
+}
+
+/** Portador del cuerpo va al final del orden de marcha (retaguardia). */
+export function moveCarrierToRear(
+  positions: CombatPosition,
+  carrierId: string,
+): CombatPosition {
+  const front = positions.front.filter((id) => id !== carrierId);
+  const rear = positions.rear.filter((id) => id !== carrierId);
+  return {
+    front,
+    rear: [...rear, carrierId],
+  };
+}
+
+/**
+ * Al dejar el cuerpo solo y volver después: 5/6 de que hayan robado el inventario.
+ */
+export function rollAbandonedBodyLoot(
+  equipment: Hero['equipment'],
+  rng: () => number = Math.random,
+): { equipment: Hero['equipment']; stolen: boolean; message: string } {
+  const roll = Math.floor(rng() * 6) + 1;
+  if (roll <= 5) {
+    return {
+      equipment: {},
+      stolen: true,
+      message: `d6=${roll}: el cuerpo fue saqueado; el inventario está vacío.`,
+    };
+  }
+  return {
+    equipment: { ...equipment },
+    stolen: false,
+    message: `d6=${roll}: el inventario del cuerpo sigue intacto.`,
   };
 }

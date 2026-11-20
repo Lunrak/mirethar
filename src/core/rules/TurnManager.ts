@@ -19,7 +19,11 @@ import {
   applyDamageToHero,
   finalizeCombatHeroes,
   releaseBodyIfCarrierDown,
+  scavengeFallenInventory,
+  pickUpBody,
+  moveCarrierToRear,
 } from './HeroStatus';
+
 import type { AttackModContext } from './AttackModifiers';
 import {
   getWoundsOnHit,
@@ -658,5 +662,70 @@ export function executeSpell(
 
   next = checkEndCondition(next);
   if (next.isFinished) return next;
+  return advanceAfterHeroAction(next);
+}
+
+
+/**
+ * Registrar inventario de un compañero caído: cuesta el turno del héroe activo.
+ */
+export function executeScavengeFallen(
+  state: CombatState,
+  fallenId: string,
+): CombatState {
+  if (state.phase !== 'heroTurn' || state.isFinished) return state;
+  const actorId = state.currentActorId;
+  if (!actorId) return state;
+
+  const result = scavengeFallenInventory(state.heroes, actorId, fallenId);
+  if (!result.ok) {
+    return {
+      ...state,
+      log: [...state.log, log(result.message)],
+    };
+  }
+
+  let next: CombatState = {
+    ...state,
+    heroes: result.heroes,
+    scavengedItems: [...(state.scavengedItems ?? []), ...result.looted],
+    log: [...state.log, log(result.message)],
+    selectedAction: null,
+    selectedTargetId: null,
+  };
+
+  // Gasta el turno
+  return advanceAfterHeroAction(next);
+}
+
+/**
+ * Cargar cuerpo de compañero caído/muerto: portador a última posición de marcha.
+ */
+export function executePickUpBody(
+  state: CombatState,
+  bodyId: string,
+): CombatState {
+  if (state.phase !== 'heroTurn' || state.isFinished) return state;
+  const actorId = state.currentActorId;
+  if (!actorId) return state;
+
+  const result = pickUpBody(state.heroes, actorId, bodyId);
+  if (!result.ok) {
+    return { ...state, log: [...state.log, log(result.message)] };
+  }
+
+  const positions = moveCarrierToRear(state.positions, actorId);
+  let next: CombatState = {
+    ...state,
+    heroes: result.heroes,
+    positions,
+    log: [
+      ...state.log,
+      log(result.message),
+      log(`${state.heroes.find((h) => h.id === actorId)?.name} pasa a la retaguardia (carga un cuerpo).`),
+    ],
+    selectedAction: null,
+    selectedTargetId: null,
+  };
   return advanceAfterHeroAction(next);
 }
