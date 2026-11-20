@@ -174,14 +174,6 @@ export default function DungeonScreen({
 							<Text style={styles.backText}>Volver</Text>
 						</Pressable>
 					)}
-					{onOpenLevelUp && (
-						<Pressable
-							onPress={onOpenLevelUp}
-							style={styles.backBtn}
-						>
-							<Text style={styles.backText}>XP {map.xpBank?.wholeXp ?? 0}</Text>
-						</Pressable>
-					)}
 				</View>
 				<ScrollView contentContainerStyle={styles.entranceList}>
 					{ENTRANCES.map((e) => (
@@ -225,15 +217,25 @@ export default function DungeonScreen({
 						Sala actual: {map.cells[map.partyCellId]?.label ?? map.partyCellId}
 					</Text>
 				</View>
-				<Pressable
-					onPress={() => {
-						setMap(null);
-						setLog([]);
-					}}
-					style={styles.backBtn}
-				>
-					<Text style={styles.backText}>Nueva</Text>
-				</Pressable>
+				<View style={{ flexDirection: 'row', gap: 8 }}>
+					{onOpenLevelUp && (
+						<Pressable
+							onPress={onOpenLevelUp}
+							style={styles.backBtn}
+						>
+							<Text style={styles.backText}>XP {map.xpBank?.wholeXp ?? 0}</Text>
+						</Pressable>
+					)}
+					<Pressable
+						onPress={() => {
+							setMap(null);
+							setLog([]);
+						}}
+						style={styles.backBtn}
+					>
+						<Text style={styles.backText}>Nueva</Text>
+					</Pressable>
+				</View>
 			</View>
 
 			<DungeonRevealOverlay
@@ -689,6 +691,24 @@ const styles = StyleSheet.create({
 		paddingBottom: 8,
 		borderBottomWidth: StyleSheet.hairlineWidth,
 		borderBottomColor: '#3a3a45',
+	},
+	completeBanner: {
+		position: 'absolute',
+		top: 56,
+		left: 16,
+		right: 16,
+		zIndex: 40,
+		padding: 12,
+		borderRadius: 10,
+		backgroundColor: 'rgba(40, 34, 14, 0.92)',
+		borderWidth: 2,
+		borderColor: '#c9a227',
+		alignItems: 'center',
+	},
+	completeText: {
+		color: '#f0d78c',
+		fontSize: 18,
+		fontWeight: '900',
 	},
 	lootBox: {
 		padding: 10,
