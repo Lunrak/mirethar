@@ -246,72 +246,101 @@ export function Battlefield({
 			selectedAction?.type === 'pickup_body');
 	const canTap = phase === 'heroTurn';
 
-	const n = enemies.filter((e) => getEnemyMaxLife(e) <= 1).length;
-	// Más presencia en pantalla (proporción tipo captura de referencia)
-	const enemySprite = n > 12 ? 72 : n > 8 ? 88 : n > 4 ? 104 : 120;
+	const COLS = 4;
+	const STACK_DX = 80;
+	const STACK_DY = -80;
 	const heroSprite = 128;
+	const baseEnemy = 96;
+
+	// Vivos primero, derecha → izquierda dentro de cada fila de 4
+	const ordered = [...enemies];
+	// Filas de 4: índices 0..3 fila 0 (frente), 4..7 detrás...
+	const layers: EnemyInstance[][] = [];
+	for (let i = 0; i < ordered.length; i += COLS) {
+		const row = ordered.slice(i, i + COLS);
+		// derecha a izquierda visual: reverse
+		layers.push(row.reverse());
+	}
 
 	return (
 		<View style={styles.root}>
-			{/* ENEMIGOS — fila superior */}
+			{/* ENEMIGOS — filas de 4, derecha→izquierda; capas atrasadas opacas + offset */}
 			<View style={styles.enemyZone}>
-				<View style={styles.row}>
-					{enemies.map((e) => {
-						const fled = !!e.fled;
-						const killed = e.currentLife <= 0 && !fled;
-						const out = killed || fled;
-						const selected = e.id === selectedTargetId;
-						const activeTurn =
-							!out &&
-							phase === 'enemyTurn' &&
-							(e.id === currentActorId || e.id === impactActorId);
-						const selectable =
-							canTap && targetingEnemy && !out && !targetAutoSelected;
-						const pose = resolvePose(
-							e.id,
-							impactActorId,
-							impactTargetId,
-							killed,
-						);
-						const focused =
-							!out && (e.id === impactTargetId || e.id === impactActorId);
-						const maxLife = getEnemyMaxLife(e);
+				{layers.map((row, layerIdx) => (
+					<View
+						key={`layer_${layerIdx}`}
+						style={[
+							styles.enemyLayer,
+							layerIdx > 0 && {
+								position: 'absolute',
+								right: layerIdx * STACK_DX,
+								top: layerIdx * STACK_DY,
+								opacity: Math.max(0.28, 0.7 - layerIdx * 0.18),
+								zIndex: 10 - layerIdx,
+							},
+						]}
+						pointerEvents={layerIdx === 0 ? 'auto' : 'none'}
+					>
+						{row.map((e) => {
+							const fled = !!e.fled;
+							const killed = e.currentLife <= 0 && !fled;
+							const out = killed || fled;
+							const selected = e.id === selectedTargetId;
+							const activeTurn =
+								!out &&
+								phase === 'enemyTurn' &&
+								(e.id === currentActorId || e.id === impactActorId);
+							const selectable =
+								canTap && targetingEnemy && !out && !targetAutoSelected;
+							const pose = resolvePose(
+								e.id,
+								impactActorId,
+								impactTargetId,
+								killed,
+							);
+							const focused =
+								!out && (e.id === impactTargetId || e.id === impactActorId);
+							const maxLife = getEnemyMaxLife(e);
+							const bossLike =
+								e.templateId.startsWith('boss_') || !!e.isFinalBoss;
+							const spriteSize = bossLike ? baseEnemy * 2 : baseEnemy;
 
-						return (
-							<UnitToken
-								key={e.id}
-								name={out ? (fled ? 'huyó' : e.name) : e.name}
-								levelLabel={out ? undefined : `LV ${e.level}`}
-								activeTurn={!!activeTurn}
-								selected={selected && !out}
-								selectable={selectable}
-								down={out}
-								isHero={false}
-								onPress={() => onSelectEnemy(e.id)}
-								showLife={!fled}
-								lifeCurrent={killed ? 0 : e.currentLife}
-								lifeMax={maxLife}
-								spriteSize={enemySprite}
-								statusSlot={<StatusBadges enemy={e} />}
-							>
-								{fled ? (
-									<View style={styles.fledBox}>
-										<Text style={styles.fledText}>huyó</Text>
-									</View>
-								) : (
-									<EnemySprite
-										enemy={e}
-										pose={pose}
-										focused={!!focused}
-										size={enemySprite}
-										bare
-										flipX
-									/>
-								)}
-							</UnitToken>
-						);
-					})}
-				</View>
+							return (
+								<UnitToken
+									key={e.id}
+									name={out ? (fled ? 'huyó' : e.name) : e.name}
+									levelLabel={out ? undefined : `LV ${e.level}`}
+									activeTurn={!!activeTurn}
+									selected={selected && !out}
+									selectable={selectable && layerIdx === 0}
+									down={out}
+									isHero={false}
+									onPress={() => onSelectEnemy(e.id)}
+									showLife={!fled}
+									lifeCurrent={killed ? 0 : e.currentLife}
+									lifeMax={maxLife}
+									spriteSize={spriteSize}
+									statusSlot={<StatusBadges enemy={e} />}
+								>
+									{fled ? (
+										<View style={styles.fledBox}>
+											<Text style={styles.fledText}>huyó</Text>
+										</View>
+									) : (
+										<EnemySprite
+											enemy={e}
+											pose={pose}
+											focused={!!focused}
+											size={spriteSize}
+											bare
+											flipX
+										/>
+									)}
+								</UnitToken>
+							);
+						})}
+					</View>
+				))}
 			</View>
 
 			{/* Espacio central (animaciones / skills a futuro) */}
@@ -375,9 +404,19 @@ const styles = StyleSheet.create({
 	},
 	enemyZone: {
 		flex: 1.15,
-		minHeight: 160,
-		justifyContent: 'center',
+		minHeight: 180,
+		justifyContent: 'flex-start',
+		alignItems: 'flex-end',
+		paddingRight: 16,
 		paddingLeft: 72,
+		paddingTop: 8,
+	},
+	enemyLayer: {
+		flexDirection: 'row',
+		flexWrap: 'nowrap',
+		justifyContent: 'flex-end',
+		alignItems: 'flex-end',
+		gap: 16,
 	},
 	mid: {
 		flex: 0.35,

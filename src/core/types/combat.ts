@@ -117,4 +117,14 @@ export type CombatState = {
 	ambush?: boolean;
 	/** Solo los 2 primeros del orden de marcha pueden ser objetivo enemigo */
 	ambushFrontOnly?: boolean;
+	/** Acciones del turno enemigo para feedback cinematográfico */
+	enemyBeats?: {
+		actorId: string;
+		targetId: string | null;
+		actorName: string;
+		actionName: string;
+		amount: number;
+		kind: 'damage' | 'miss' | 'info';
+		message: string;
+	}[];
 };

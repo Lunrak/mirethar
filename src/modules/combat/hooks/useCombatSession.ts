@@ -315,10 +315,35 @@ export function useCombatSession(config: CombatSessionConfig | EncounterType = '
   const acknowledgeResult = useCallback(() => {
     setState((prev) => {
       let next = pendingResult ?? prev;
+
+      // Más acciones enemigas en cola → mostrar siguiente overlay
+      const queue = next.enemyBeats ?? [];
+      if (queue.length > 0 && next.phase === 'enemyTurn') {
+        const b = queue[0];
+        setLastFeedback({
+          id: `eb_${Date.now().toString(36)}_${queue.length}`,
+          kind: b.kind === 'miss' ? 'miss' : b.amount > 0 ? 'damage' : 'info',
+          amount: b.amount,
+          headline: b.message,
+          detail: b.message,
+          actorId: b.actorId,
+          targetId: b.targetId,
+          actorName: b.actorName,
+          actionName: b.actionName,
+        });
+        setFocusActorId(b.actorId);
+        setFocusTargetId(b.targetId);
+        setPendingResult({ ...next, enemyBeats: queue.slice(1) });
+        setDiceUi('result');
+        return { ...next, enemyBeats: queue.slice(1) };
+      }
+
       setPendingResult(null);
 
+      // Si aún está en enemyTurn sin beats, cerrar turno enemigo avanzando héroes
       if (!next.isFinished && next.phase === 'enemyTurn') {
-        next = runEnemyTurn(next);
+        // runEnemyTurn ya aplicó daño; solo avanzar a heroTurn si no se hizo
+        // El estado `next` de runEnemyTurn ya tiene phase heroTurn normalmente
       }
 
       setLastDiceTotal(null);
@@ -327,30 +352,55 @@ export function useCombatSession(config: CombatSessionConfig | EncounterType = '
       setFocusTargetId(null);
       setTargetAutoSelected(false);
       setDiceUi(syncDiceFromState(next, 'idle'));
-      return next;
+      return { ...next, enemyBeats: [] };
     });
   }, [pendingResult, syncDiceFromState]);
 
 
-  // Auto-resolver turno enemigo (emboscada o tras ronda de héroes)
+  // Auto-resolver turno enemigo y mostrar cada acción (overlay)
   useEffect(() => {
     if (state.isFinished) return;
     if (state.phase !== 'enemyTurn') return;
     if (diceUi === 'spinning' || diceUi === 'result') return;
+    if (lastFeedback) return; // esperando overlay
 
     const timer = setTimeout(() => {
       setState((prev) => {
         if (prev.phase !== 'enemyTurn' || prev.isFinished) return prev;
         const next = runEnemyTurn(prev);
+        const beats = next.enemyBeats ?? [];
+        if (beats.length > 0) {
+          // Encolar feedbacks: el primero ahora; el resto se encadenan al acabar
+          const b = beats[0];
+          setLastFeedback({
+            id: `eb_${Date.now().toString(36)}_0`,
+            kind: b.kind === 'miss' ? 'miss' : b.amount > 0 ? 'damage' : 'info',
+            amount: b.amount,
+            headline: b.message,
+            detail: b.message,
+            actorId: b.actorId,
+            targetId: b.targetId,
+            actorName: b.actorName,
+            actionName: b.actionName,
+          });
+          setFocusActorId(b.actorId);
+          setFocusTargetId(b.targetId);
+          setPendingResult({
+            ...next,
+            enemyBeats: beats.slice(1),
+          });
+          setDiceUi('result'); // reutiliza temporizador de ack
+          return { ...next, phase: 'enemyTurn', currentActorId: null }; // UI enemiga hasta acabar beats
+        }
         setDiceUi(syncDiceFromState(next, 'idle'));
         setLastFeedback(null);
         setFocusActorId(null);
         setFocusTargetId(null);
         return next;
       });
-    }, 400);
+    }, 350);
     return () => clearTimeout(timer);
-  }, [state.phase, state.isFinished, state.round, diceUi, syncDiceFromState]);
+  }, [state.phase, state.isFinished, state.round, diceUi, lastFeedback, syncDiceFromState]);
 
   return {
     state,

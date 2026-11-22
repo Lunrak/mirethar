@@ -52,6 +52,17 @@ import type {
   Hero,
 } from '../types/combat';
 
+export type EnemyActionBeat = {
+  actorId: string;
+  targetId: string | null;
+  actorName: string;
+  actionName: string;
+  amount: number;
+  kind: 'damage' | 'miss' | 'info';
+  message: string;
+};
+
+
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
@@ -375,6 +386,7 @@ export function runEnemyTurn(
   let heroes = state.heroes.map((h) => ({ ...h }));
   let enemies = state.enemies.map((e) => ({ ...e }));
   let logEntries = [...state.log];
+  const beats: EnemyActionBeat[] = [];
   const rng = opts.rng;
   const minotaurTracker: MinotaurChargeTracker = opts.minotaurTracker ?? new Set();
 
@@ -493,6 +505,15 @@ export function runEnemyTurn(
       }
 
       logEntries.push(log(`${enemy.name} ataca a ${target.name}: ${defResult.message}`));
+      beats.push({
+        actorId: enemy.id,
+        targetId: target.id,
+        actorName: enemy.name,
+        actionName: 'Attack',
+        amount: defResult.success ? 0 : defResult.damageTaken,
+        kind: defResult.success ? 'miss' : 'damage',
+        message: defResult.message,
+      });
 
       if (!defResult.success) {
         const heroIdx = heroes.findIndex((h) => h.id === target!.id);
@@ -534,10 +555,11 @@ export function runEnemyTurn(
     heroes,
     enemies,
     log: logEntries,
+    enemyBeats: beats,
   };
 
   next = checkEndCondition(next);
-  if (next.isFinished) return next;
+  if (next.isFinished) return { ...next, enemyBeats: beats };
 
   const newOrder = rebuildHeroTurnOrder(next.heroes);
   if (newOrder.length === 0) {
