@@ -277,7 +277,7 @@ const styles = StyleSheet.create({
 		justifyContent: 'center',
 	},
 	tileImg: {
-		...StyleSheet.absoluteFillObject,
+		...StyleSheet.absoluteFill,
 		width: CELL,
 		height: CELL,
 	},
