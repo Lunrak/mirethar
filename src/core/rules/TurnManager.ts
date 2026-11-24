@@ -43,7 +43,7 @@ import {
   checkBossMoraleAfterDamage,
   moraleDisplayName,
 } from './MoraleService';
-import { getEnemyMaxLife } from '../data/enemyLookup';
+import { getEnemyMaxLife, getEnemyTemplate } from '../data/enemyLookup';
 import type {
   Action,
   CombatLogEntry,
@@ -363,10 +363,188 @@ export function executeHeroAttack(
 // ---------------------------------------------------------------------------
 
 /**
- * Quién recibe el ataque (reglas 4AD simplificadas para room):
- * - Si hay tantos o más enemigos que héroes: 1 ataque por héroe (+ extras al azar)
- * - Si hay menos enemigos: cada enemigo ataca a un héroe distinto (jugador elige → aquí al primero vivo)
- * MVP: cada enemigo vivo realiza `attacks` ataques contra héroes vivos en orden de marcha (front first).
+ * Asignación de objetivos según 4AD (sala):
+ *
+ * Minions / vermin (grupo):
+ *  - menos monstruos que héroes → cada monstruo ataca a un héroe distinto
+ *    (los que sobran no reciben ataque; preferencia: no front / menos tank)
+ *  - igual número → 1 ataque por héroe
+ *  - más monstruos → reparto equitativo; extras al front / más tank
+ *
+ * Boss / weird / final (criatura única con N ataques):
+ *  - cada ataque elige un héroe al azar entre los vivos
+ *  - si hay varios héroes se intenta no repetir hasta agotar el pool
+ *    (p. ej. dragón: 2 ataques a 2 personajes aleatorios)
+ *
+ * Devuelve lista ordenada (enemyId, attackIndex, heroId) para el turno.
+ */
+export type EnemyAttackAssignment = {
+  enemyId: string;
+  attackIndex: number;
+  heroId: string;
+};
+
+function enemyKind(
+  enemy: EnemyInstance,
+): 'vermin' | 'minion' | 'boss' | 'weird' {
+  const t = getEnemyTemplate(enemy.templateId);
+  if (t?.type) return t.type;
+  if (enemy.isFinalBoss) return 'boss';
+  if ((enemy.maxLife ?? enemy.currentLife) > 1) return 'boss';
+  return 'minion';
+}
+
+function isMajorEnemy(enemy: EnemyInstance): boolean {
+  const k = enemyKind(enemy);
+  return k === 'boss' || k === 'weird' || !!enemy.isFinalBoss;
+}
+
+/** Preferencia “jugador elige”: front rank y más vida máxima primero (tanks). */
+function sortHeroesForExtraHits(
+  heroes: Hero[],
+  frontIds: string[],
+): Hero[] {
+  return [...heroes].sort((a, b) => {
+    const af = frontIds.includes(a.id) ? 0 : 1;
+    const bf = frontIds.includes(b.id) ? 0 : 1;
+    if (af !== bf) return af - bf;
+    return (b.maxLife ?? b.life) - (a.maxLife ?? a.life);
+  });
+}
+
+/** Preferencia para quién NO recibe ataque cuando sobran héroes: rear / menos tank. */
+function sortHeroesToSkip(
+  heroes: Hero[],
+  frontIds: string[],
+): Hero[] {
+  return [...heroes].sort((a, b) => {
+    const af = frontIds.includes(a.id) ? 1 : 0;
+    const bf = frontIds.includes(b.id) ? 1 : 0;
+    if (af !== bf) return af - bf; // rear primero
+    return (a.maxLife ?? a.life) - (b.maxLife ?? b.life);
+  });
+}
+
+function pickRandomHero(
+  heroes: Hero[],
+  rng?: () => number,
+  excludeIds?: Set<string>,
+): Hero | undefined {
+  const pool = excludeIds?.size
+    ? heroes.filter((h) => !excludeIds.has(h.id))
+    : heroes;
+  const use = pool.length > 0 ? pool : heroes;
+  if (use.length === 0) return undefined;
+  const r = rng ? rng() : Math.random();
+  const idx = Math.min(use.length - 1, Math.floor(r * use.length));
+  return use[idx];
+}
+
+/**
+ * Construye la lista de ataques del turno enemigo con objetivos ya repartidos.
+ * `eligibleHeroes` debe ser solo héroes vivos (y filtrados por emboscada si aplica).
+ */
+export function assignEnemyAttackTargets(
+  enemies: EnemyInstance[],
+  eligibleHeroes: Hero[],
+  opts: {
+    frontIds?: string[];
+    rng?: () => number;
+  } = {},
+): EnemyAttackAssignment[] {
+  const alive = enemies.filter(
+    (e) => e.currentLife > 0 && !e.fled && !isInvisibleGremlins(e),
+  );
+  const heroes = eligibleHeroes.filter(
+    (h) => !h.isDead && !h.isFallen && h.life > 0,
+  );
+  if (alive.length === 0 || heroes.length === 0) return [];
+
+  const frontIds = opts.frontIds ?? [];
+  const rng = opts.rng;
+  const out: EnemyAttackAssignment[] = [];
+
+  const majors = alive.filter(isMajorEnemy);
+  const minors = alive.filter((e) => !isMajorEnemy(e));
+
+  // --- Boss / weird / final: ataques al azar ---
+  for (const enemy of majors) {
+    const n = Math.max(1, enemy.attacks ?? 1);
+    const used = new Set<string>();
+    for (let a = 0; a < n; a++) {
+      // Preferir héroes aún no elegidos este turno de esta criatura
+      let target = pickRandomHero(heroes, rng, used);
+      if (!target) target = pickRandomHero(heroes, rng);
+      if (!target) break;
+      used.add(target.id);
+      // Si ya se usaron todos, reiniciar pool para ataques restantes
+      if (used.size >= heroes.length) used.clear();
+      out.push({ enemyId: enemy.id, attackIndex: a, heroId: target.id });
+    }
+  }
+
+  // --- Minions / vermin: reparto por número de ataques totales ---
+  if (minors.length > 0) {
+    // Cada minion aporta `attacks` slots (casi siempre 1)
+    const slots: { enemyId: string; attackIndex: number }[] = [];
+    for (const e of minors) {
+      const n = Math.max(1, e.attacks ?? 1);
+      for (let a = 0; a < n; a++) {
+        slots.push({ enemyId: e.id, attackIndex: a });
+      }
+    }
+
+    const nM = slots.length;
+    const nH = heroes.length;
+
+    // Orden de héroes para asignar extras / skips
+    const preferHit = sortHeroesForExtraHits(heroes, frontIds);
+    const preferSkip = sortHeroesToSkip(heroes, frontIds);
+
+    if (nM <= nH) {
+      // Cada monstruo (slot) a un héroe distinto; sobran héroes sin ataque
+      const targets = preferHit.slice(0, nM);
+      for (let i = 0; i < slots.length; i++) {
+        out.push({
+          enemyId: slots[i].enemyId,
+          attackIndex: slots[i].attackIndex,
+          heroId: targets[i].id,
+        });
+      }
+    } else {
+      // Más ataques que héroes: base + extras
+      const base = Math.floor(nM / nH);
+      let extra = nM % nH;
+      // Cola de heroIds: base veces cada uno (orden preferHit), luego extras
+      const queue: string[] = [];
+      for (const h of preferHit) {
+        for (let i = 0; i < base; i++) queue.push(h.id);
+      }
+      for (const h of preferHit) {
+        if (extra <= 0) break;
+        queue.push(h.id);
+        extra--;
+      }
+      // Asignar slots en orden de monstruos
+      for (let i = 0; i < slots.length; i++) {
+        out.push({
+          enemyId: slots[i].enemyId,
+          attackIndex: slots[i].attackIndex,
+          heroId: queue[i] ?? preferHit[i % preferHit.length].id,
+        });
+      }
+    }
+
+    // preferSkip no se usa en la lista final (solo documenta la regla de “quién se salva”);
+    // al coger preferHit.slice(0, nM) los de preferSkip quedan fuera automáticamente.
+    void preferSkip;
+  }
+
+  return out;
+}
+
+/**
+ * Turno de enemigos: atacan automáticamente con objetivos repartidos (4AD).
  */
 export function runEnemyTurn(
   state: CombatState,
@@ -437,12 +615,18 @@ export function runEnemyTurn(
     );
   }
 
-  let targetCursor = 0;
+  // Héroes elegibles (orden de marcha / emboscada)
+  const eligibleHeroes = targetOrder
+    .map((id) => heroes.find((h) => h.id === id))
+    .filter((h): h is Hero => !!h && !h.isDead && !h.isFallen && h.life > 0);
 
+  // Aliento de quimera/dragón puede sustituir ataques de ese enemigo
+  const skippedEnemyIds = new Set<string>();
   for (const enemy of aliveEnemies) {
-    if (isInvisibleGremlins(enemy)) continue;
-
-    // Aliento de quimera / dragón puede sustituir los ataques
+    if (isInvisibleGremlins(enemy)) {
+      skippedEnemyIds.add(enemy.id);
+      continue;
+    }
     const breath = tryBreathAttack(enemy, heroes, rng);
     if (breath.log.length) {
       for (const m of breath.log) logEntries.push(log(m));
@@ -450,104 +634,128 @@ export function runEnemyTurn(
     if (breath.usedBreath) {
       heroes = breath.heroes;
       heroes = releaseBodyIfCarrierDown(heroes);
+      skippedEnemyIds.add(enemy.id);
       continue;
     }
     if (breath.heroes !== heroes) {
       heroes = breath.heroes;
     }
+  }
 
-    const attackCount = Math.max(1, enemy.attacks ?? 1);
+  // Recomputar elegibles tras aliento (puede haber caídos)
+  const eligibleAfterBreath = targetOrder
+    .map((id) => heroes.find((h) => h.id === id))
+    .filter((h): h is Hero => !!h && !h.isDead && !h.isFallen && h.life > 0);
 
-    for (let a = 0; a < attackCount; a++) {
-      let target: Hero | undefined;
-      for (let t = 0; t < targetOrder.length; t++) {
-        const idx = (targetCursor + t) % targetOrder.length;
-        const candidate = heroes.find(
-          (h) => h.id === targetOrder[idx] && !h.isDead && !h.isFallen && h.life > 0
-        );
-        if (candidate) {
-          target = candidate;
-          targetCursor = (idx + 1) % targetOrder.length;
-          break;
-        }
-      }
-      if (!target) break;
+  const attackers = aliveEnemies.filter((e) => !skippedEnemyIds.has(e.id));
+  const frontIds = state.positions.front ?? [];
+  const assignments = assignEnemyAttackTargets(attackers, eligibleAfterBreath, {
+    frontIds,
+    rng,
+  });
 
-      const woundsOnHit = getWoundsOnHit(enemy);
-      const chargePenalty = minotaurDefensePenalty(enemy, minotaurTracker);
+  // Ejecutar cada ataque asignado (en orden de monstruos)
+  for (const asg of assignments) {
+    const enemy = enemies.find((e) => e.id === asg.enemyId);
+    if (!enemy || enemy.currentLife <= 0 || enemy.fled) continue;
 
-      // Iron Eater: armadura pesada no cuenta (shield y light sí)
-      const heavyOnly =
-        isIronEater(enemy) &&
-        !!(
-          target.equipment?.armor &&
-          (target.equipment.armor.tags?.includes('heavy') ||
-            target.equipment.armor.id === 'heavy_armor')
-        );
+    const target = heroes.find(
+      (h) => h.id === asg.heroId && !h.isDead && !h.isFallen && h.life > 0,
+    );
+    // Si el objetivo cayó por un ataque anterior, reasignar a otro vivo
+    const resolvedTarget =
+      target ??
+      eligibleAfterBreath.find(
+        (h) =>
+          !h.isDead &&
+          !h.isFallen &&
+          h.life > 0 &&
+          heroes.some((x) => x.id === h.id && x.life > 0 && !x.isFallen && !x.isDead),
+      ) ??
+      heroes.find((h) => !h.isDead && !h.isFallen && h.life > 0);
 
-      const defResult = resolveDefense(
-        target,
-        enemy.level,
-        {
-          surpriseAttack: false,
-          ignoresArmor: heavyOnly,
-          attackerName: enemy.name,
-          attackerTemplateId: enemy.templateId,
-          extra: chargePenalty,
-          rng,
-        },
-        Math.max(1, woundsOnHit || 1)
+    if (!resolvedTarget) break;
+
+    // Refrescar referencia al héroe actual en el array mutable
+    const liveTarget =
+      heroes.find((h) => h.id === resolvedTarget.id && !h.isDead && !h.isFallen && h.life > 0) ??
+      resolvedTarget;
+
+    const woundsOnHit = getWoundsOnHit(enemy);
+    const chargePenalty = minotaurDefensePenalty(enemy, minotaurTracker);
+
+    const heavyOnly =
+      isIronEater(enemy) &&
+      !!(
+        liveTarget.equipment?.armor &&
+        (liveTarget.equipment.armor.tags?.includes('heavy') ||
+          liveTarget.equipment.armor.id === 'heavy_armor')
       );
 
-      // Ajuste mensaje minotauro
-      if (chargePenalty < 0) {
-        logEntries.push(log(`Cargo del Minotauro: primera defensa de ${target.name} a -1.`));
-      }
+    const defResult = resolveDefense(
+      liveTarget,
+      enemy.level,
+      {
+        surpriseAttack: false,
+        ignoresArmor: heavyOnly,
+        attackerName: enemy.name,
+        attackerTemplateId: enemy.templateId,
+        extra: chargePenalty,
+        rng,
+      },
+      Math.max(1, woundsOnHit || 1),
+    );
 
-      logEntries.push(log(`${enemy.name} ataca a ${target.name}: ${defResult.message}`));
-      beats.push({
-        actorId: enemy.id,
-        targetId: target.id,
-        actorName: enemy.name,
-        actionName: 'Attack',
-        amount: defResult.success ? 0 : defResult.damageTaken,
-        kind: defResult.success ? 'miss' : 'damage',
-        message: defResult.message,
-      });
+    if (chargePenalty < 0) {
+      logEntries.push(
+        log(`Cargo del Minotauro: primera defensa de ${liveTarget.name} a -1.`),
+      );
+    }
 
-      if (!defResult.success) {
-        const heroIdx = heroes.findIndex((h) => h.id === target!.id);
+    logEntries.push(
+      log(`${enemy.name} ataca a ${liveTarget.name}: ${defResult.message}`),
+    );
+    beats.push({
+      actorId: enemy.id,
+      targetId: liveTarget.id,
+      actorName: enemy.name,
+      actionName: 'Attack',
+      amount: defResult.success ? 0 : defResult.damageTaken,
+      kind: defResult.success ? 'miss' : 'damage',
+      message: defResult.message,
+    });
 
-        if (isIronEater(enemy)) {
-          const stolen = applyIronEaterHit(heroes[heroIdx], rng);
-          heroes[heroIdx] = stolen.hero;
-          logEntries.push(log(stolen.message));
-        } else {
-          let damaged = applyDamageToHero(heroes[heroIdx], defResult.damageTaken);
-          if (damaged.isFallen && !heroes[heroIdx].isFallen) {
-            logEntries.push(log(`${damaged.name} ha caído (0 life).`));
-            // Conversión momia
-            const conv = tryMummyConversion(heroes, enemies, damaged.id, enemy);
-            if (conv.log.length) {
-              heroes = conv.heroes;
-              enemies = conv.enemies;
-              for (const m of conv.log) logEntries.push(log(m));
-            } else {
-              heroes[heroIdx] = damaged;
-            }
+    if (!defResult.success) {
+      const heroIdx = heroes.findIndex((h) => h.id === liveTarget.id);
+      if (heroIdx < 0) continue;
+
+      if (isIronEater(enemy)) {
+        const stolen = applyIronEaterHit(heroes[heroIdx], rng);
+        heroes[heroIdx] = stolen.hero;
+        logEntries.push(log(stolen.message));
+      } else {
+        let damaged = applyDamageToHero(heroes[heroIdx], defResult.damageTaken);
+        if (damaged.isFallen && !heroes[heroIdx].isFallen) {
+          logEntries.push(log(`${damaged.name} ha caído (0 life).`));
+          const conv = tryMummyConversion(heroes, enemies, damaged.id, enemy);
+          if (conv.log.length) {
+            heroes = conv.heroes;
+            enemies = conv.enemies;
+            for (const m of conv.log) logEntries.push(log(m));
           } else {
-            // Veneno
-            const poison = tryPoisonSave(damaged, enemy, rng);
-            if (poison.message) logEntries.push(log(poison.message));
-            heroes[heroIdx] = poison.hero;
-            if (poison.hero.isFallen && !damaged.isFallen) {
-              logEntries.push(log(`${poison.hero.name} ha caído por el veneno.`));
-            }
+            heroes[heroIdx] = damaged;
+          }
+        } else {
+          const poison = tryPoisonSave(damaged, enemy, rng);
+          if (poison.message) logEntries.push(log(poison.message));
+          heroes[heroIdx] = poison.hero;
+          if (poison.hero.isFallen && !damaged.isFallen) {
+            logEntries.push(log(`${poison.hero.name} ha caído por el veneno.`));
           }
         }
       }
-      heroes = releaseBodyIfCarrierDown(heroes);
     }
+    heroes = releaseBodyIfCarrierDown(heroes);
   }
 
   let next: CombatState = {

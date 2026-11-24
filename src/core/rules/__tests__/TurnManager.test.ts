@@ -8,6 +8,7 @@ import {
   applyHeroAttack,
   getAliveEnemies,
   isPartyOutnumbering,
+  assignEnemyAttackTargets,
 } from '../TurnManager';
 import {
   createCombat,
@@ -16,7 +17,7 @@ import {
 } from '../CombatStateManager';
 import { createDefaultParty, createHero } from '../../data/classes';
 import { generateEncounter } from '../EncounterGenerator';
-import type { Action, CombatState, EnemyInstance } from '../../types/combat';
+import type { Action, CombatState, EnemyInstance, Hero } from '../../types/combat';
 
 const attack: Action = { type: 'attack', name: 'Attack', requiresTarget: true };
 
@@ -203,5 +204,92 @@ describe('helpers', () => {
   it('isPartyOutnumbering', () => {
     const state = setup('boss');
     expect(isPartyOutnumbering(state)).toBe(true);
+  });
+});
+
+describe('TurnManager – assignEnemyAttackTargets (4AD)', () => {
+  const mkHero = (id: string, maxLife = 5): Hero =>
+    ({
+      id,
+      name: id,
+      class: 'warrior',
+      level: 1,
+      life: maxLife,
+      maxLife,
+      equipment: {},
+      status: [],
+      isFallen: false,
+      isDead: false,
+    }) as Hero;
+
+  const mkMinion = (id: string): EnemyInstance => ({
+    id,
+    templateId: 'minion_goblins',
+    name: 'Goblin',
+    level: 3,
+    currentLife: 1,
+    attacks: 1,
+  });
+
+  const mkBoss = (id: string, attacks: number): EnemyInstance => ({
+    id,
+    templateId: 'boss_orc_brute',
+    name: 'Orc Brute',
+    level: 5,
+    currentLife: 5,
+    maxLife: 5,
+    attacks,
+  });
+
+  it('menos minions que héroes: cada minion a un héroe distinto', () => {
+    const heroes = [mkHero('h1', 8), mkHero('h2', 5), mkHero('h3', 4), mkHero('h4', 3)];
+    const enemies = [mkMinion('m1'), mkMinion('m2')];
+    const asg = assignEnemyAttackTargets(enemies, heroes, {
+      frontIds: ['h1', 'h2'],
+    });
+    expect(asg).toHaveLength(2);
+    const targets = new Set(asg.map((a) => a.heroId));
+    expect(targets.size).toBe(2);
+    // Preferencia de impacto: front / tank
+    expect(targets.has('h1')).toBe(true);
+    expect(targets.has('h2')).toBe(true);
+  });
+
+  it('igual número: un ataque por héroe', () => {
+    const heroes = [mkHero('h1'), mkHero('h2'), mkHero('h3')];
+    const enemies = [mkMinion('m1'), mkMinion('m2'), mkMinion('m3')];
+    const asg = assignEnemyAttackTargets(enemies, heroes, { frontIds: ['h1'] });
+    expect(asg).toHaveLength(3);
+    expect(new Set(asg.map((a) => a.heroId)).size).toBe(3);
+  });
+
+  it('más minions que héroes: reparto equitativo', () => {
+    const heroes = [mkHero('h1', 8), mkHero('h2', 5)];
+    const enemies = Array.from({ length: 5 }, (_, i) => mkMinion(`m${i}`));
+    const asg = assignEnemyAttackTargets(enemies, heroes, {
+      frontIds: ['h1'],
+    });
+    expect(asg).toHaveLength(5);
+    const counts: Record<string, number> = {};
+    for (const a of asg) counts[a.heroId] = (counts[a.heroId] ?? 0) + 1;
+    // 5 ataques / 2 héroes → 3 y 2
+    const vals = Object.values(counts).sort((a, b) => b - a);
+    expect(vals[0]).toBe(3);
+    expect(vals[1]).toBe(2);
+    // Extra al front/tank
+    expect(counts['h1']).toBe(3);
+  });
+
+  it('boss con varios ataques: objetivos aleatorios sin repetir si hay héroes', () => {
+    const heroes = [mkHero('h1'), mkHero('h2'), mkHero('h3'), mkHero('h4')];
+    const enemies = [mkBoss('b1', 3)];
+    // rng determinista: 0, 0.3, 0.6 → índices distintos
+    let i = 0;
+    const vals = [0.01, 0.34, 0.67];
+    const rng = () => vals[i++ % vals.length];
+    const asg = assignEnemyAttackTargets(enemies, heroes, { rng });
+    expect(asg).toHaveLength(3);
+    expect(asg.every((a) => a.enemyId === 'b1')).toBe(true);
+    expect(new Set(asg.map((a) => a.heroId)).size).toBe(3);
   });
 });
