@@ -200,7 +200,7 @@ export default function CombatScreen({
 				</View>
 			</View>
 
-			{/* Info objetivo — derecha, ligera */}
+			{/* Info objetivo — arriba derecha */}
 			<View
 				style={styles.rightRail}
 				pointerEvents="box-none"
@@ -214,13 +214,13 @@ export default function CombatScreen({
 				/>
 			</View>
 
-			{/* Acciones — columna derecha estilo captura */}
+			{/* Acciones = franja central de iconos (SkillBar de la referencia) */}
 			<View
-				style={styles.actionStack}
+				style={styles.skillBand}
 				pointerEvents="box-none"
 			>
 				<ActionPanel
-					layout="stack"
+					layout="icons"
 					actions={actions}
 					selected={state.selectedAction}
 					disabled={actionsDisabled}
@@ -237,7 +237,7 @@ export default function CombatScreen({
 				<CombatLog entries={state.log} />
 			</View>
 
-			{/* Dado fijo esquina inferior derecha, sin fondo opaco */}
+			{/* Dado en esquina inferior derecha (sustituye botones de acción de esquina) */}
 			<View
 				style={styles.diceSlot}
 				pointerEvents="box-none"
@@ -308,29 +308,34 @@ const styles = StyleSheet.create({
 	},
 	rightRail: {
 		position: 'absolute',
-		right: 120,
+		right: 12,
 		top: 48,
 		zIndex: 20,
 		maxWidth: 140,
 	},
-	actionStack: {
+	/** Franja media ~43% como SkillBar de la referencia */
+	skillBand: {
 		position: 'absolute',
-		right: 10,
-		bottom: 16,
+		left: '18%',
+		right: '18%',
+		top: '42%',
+		height: '16%',
 		zIndex: 35,
-		alignItems: 'stretch',
+		alignItems: 'center',
+		justifyContent: 'center',
 	},
 	logSlot: {
 		position: 'absolute',
 		left: 0,
-		right: 100,
+		right: 110,
 		bottom: 0,
 		zIndex: 25,
 	},
+	/** Esquina inferior derecha: el dado ocupa el lugar de los botones de esquina */
 	diceSlot: {
 		position: 'absolute',
-		left: 8,
-		top: 44,
+		right: 10,
+		bottom: 12,
 		zIndex: 40,
 	},
 });

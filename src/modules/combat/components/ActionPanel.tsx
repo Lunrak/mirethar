@@ -1,6 +1,7 @@
 /**
- * Botones de acción estilo captura: columna derecha
- * ATTACK (rojo), hechizos (ámbar), DEFEND/otros (verde)
+ * Barra de acciones estilo SkillBar (referencia de combate):
+ * iconos centrados en la franja media del escenario.
+ * Cada acción es un icono con marco, no un botón de texto.
  */
 
 import React from 'react';
@@ -8,152 +9,226 @@ import { View, Text, StyleSheet, Pressable } from 'react-native';
 import type { Action, Hero } from '../../../core/types/combat';
 
 type Props = {
-  actions: Action[];
-  selected: Action | null;
-  disabled?: boolean;
-  currentHero?: Hero | null;
-  targetAutoSelected?: boolean;
-  onSelect: (action: Action) => void;
-  layout?: 'rail' | 'bar' | 'stack';
+	actions: Action[];
+	selected: Action | null;
+	disabled?: boolean;
+	currentHero?: Hero | null;
+	targetAutoSelected?: boolean;
+	onSelect: (action: Action) => void;
+	/** 'icons' = franja central (default); 'stack' legacy columna */
+	layout?: 'icons' | 'stack' | 'bar' | 'rail';
 };
 
-function colorsFor(action: Action): { border: string; bg: string; text: string } {
-  const n = action.name.toLowerCase();
-  if (action.type === 'attack' || n === 'attack') {
-    return { border: '#c43c3c', bg: 'rgba(40, 16, 16, 0.88)', text: '#f0c0c0' };
-  }
-  if (action.type === 'heal' || n.includes('heal') || n.includes('defend') || n.includes('protect')) {
-    return { border: '#3d8b5f', bg: 'rgba(14, 32, 22, 0.88)', text: '#b8e0c8' };
-  }
-  if (action.type === 'scavenge' || action.type === 'pickup_body') {
-    return { border: '#7a8aaa', bg: 'rgba(20, 24, 36, 0.88)', text: '#c8d0e0' };
-  }
-  // spells / focus-like
-  return { border: '#c9a227', bg: 'rgba(40, 34, 14, 0.88)', text: '#f0d78c' };
+/** Glifo por tipo de acción (sin assets externos). */
+function iconFor(action: Action): { glyph: string; accent: string } {
+	const n = action.name.toLowerCase();
+	if (action.type === 'attack' || n === 'attack') {
+		return { glyph: '⚔', accent: '#A72E35' };
+	}
+	if (action.type === 'heal' || n.includes('heal')) {
+		return { glyph: '✚', accent: '#557B36' };
+	}
+	if (n.includes('fireball') || n.includes('lightning')) {
+		return { glyph: '✦', accent: '#C78316' };
+	}
+	if (action.type === 'spell') {
+		return { glyph: '✧', accent: '#C78316' };
+	}
+	if (action.type === 'scavenge') {
+		return { glyph: '👜', accent: '#7a8aaa' };
+	}
+	if (action.type === 'pickup_body') {
+		return { glyph: '†', accent: '#8a7a6a' };
+	}
+	if (n.includes('defend') || n.includes('protect') || n.includes('focus')) {
+		return { glyph: '🛡', accent: '#557B36' };
+	}
+	return { glyph: '●', accent: '#C78316' };
 }
 
 export function ActionPanel({
-  actions,
-  selected,
-  disabled,
-  currentHero,
-  targetAutoSelected = false,
-  onSelect,
-  layout = 'stack',
+	actions,
+	selected,
+	disabled,
+	currentHero,
+	targetAutoSelected = false,
+	onSelect,
+	layout = 'icons',
 }: Props) {
-  return (
-    <View style={layout === 'bar' ? styles.barWrap : styles.stackWrap}>
-      {currentHero && (
-        <Text style={styles.actorLabel} numberOfLines={1}>
-          {currentHero.name}
-        </Text>
-      )}
-      <View style={layout === 'bar' ? styles.barRow : styles.stackCol}>
-        {actions.map((action) => {
-          const isSelected =
-            selected?.name === action.name && selected?.type === action.type;
-          const c = colorsFor(action);
-          const showHint =
-            action.requiresTarget &&
-            !(
-              isSelected &&
-              targetAutoSelected &&
-              (action.type === 'attack' || action.type === 'spell')
-            );
+	if (layout === 'stack' || layout === 'rail' || layout === 'bar') {
+		// Compatibilidad mínima con layout antiguo de texto
+		return (
+			<View style={styles.legacyCol}>
+				{currentHero ? (
+					<Text
+						style={styles.actorLabel}
+						numberOfLines={1}
+					>
+						{currentHero.name}
+					</Text>
+				) : null}
+				{actions.map((action) => {
+					const isSelected =
+						selected?.name === action.name && selected?.type === action.type;
+					const { glyph, accent } = iconFor(action);
+					return (
+						<Pressable
+							key={`${action.type}-${action.name}`}
+							disabled={disabled}
+							onPress={() => onSelect(action)}
+							style={[
+								styles.legacyBtn,
+								{ borderColor: accent },
+								isSelected && styles.selected,
+								disabled && styles.disabled,
+							]}
+						>
+							<Text style={styles.legacyGlyph}>{glyph}</Text>
+							<Text style={styles.legacyName}>{action.name}</Text>
+						</Pressable>
+					);
+				})}
+			</View>
+		);
+	}
 
-          return (
-            <Pressable
-              key={`${action.type}-${action.name}`}
-              disabled={disabled}
-              onPress={() => onSelect(action)}
-              style={({ pressed }) => [
-                styles.btn,
-                {
-                  borderColor: c.border,
-                  backgroundColor: c.bg,
-                },
-                isSelected && styles.btnSelected,
-                disabled && styles.btnDisabled,
-                pressed && !disabled && styles.btnPressed,
-              ]}
-              accessibilityRole="button"
-              accessibilityLabel={action.name}
-            >
-              <Text style={[styles.btnText, { color: c.text }]}>
-                {action.name.toUpperCase()}
-              </Text>
-              {showHint && <Text style={styles.hint}>objetivo</Text>}
-            </Pressable>
-          );
-        })}
-      </View>
-    </View>
-  );
+	// Franja central tipo SkillBar (referencia)
+	return (
+		<View
+			style={styles.row}
+			pointerEvents="box-none"
+		>
+			{actions.map((action) => {
+				const isSelected =
+					selected?.name === action.name && selected?.type === action.type;
+				const { glyph, accent } = iconFor(action);
+				const needsTarget =
+					action.requiresTarget &&
+					!(
+						isSelected &&
+						targetAutoSelected &&
+						(action.type === 'attack' || action.type === 'spell')
+					);
+
+				return (
+					<Pressable
+						key={`${action.type}-${action.name}`}
+						disabled={disabled}
+						onPress={() => onSelect(action)}
+						style={[
+							styles.skill,
+							isSelected && styles.selected,
+							disabled && styles.disabled,
+						]}
+						accessibilityRole="button"
+						accessibilityLabel={action.name}
+					>
+						<View style={[styles.iconFace, { backgroundColor: accent }]}>
+							<Text style={styles.glyph}>{glyph}</Text>
+						</View>
+						{/* Coste / etiqueta corta esquina */}
+						<Text
+							style={styles.cost}
+							numberOfLines={1}
+						>
+							{action.name.length > 8
+								? action.name.slice(0, 7) + '…'
+								: action.name}
+						</Text>
+						{needsTarget ? <View style={styles.targetDot} /> : null}
+					</Pressable>
+				);
+			})}
+		</View>
+	);
 }
 
 const styles = StyleSheet.create({
-  stackWrap: {
-    alignItems: 'stretch',
-    gap: 6,
-    minWidth: 110,
-  },
-  barWrap: {
-    alignItems: 'center',
-    gap: 6,
-  },
-  actorLabel: {
-    color: '#c9a227',
-    fontSize: 11,
-    fontWeight: '800',
-    textAlign: 'center',
-    marginBottom: 2,
-    textShadowColor: 'rgba(0,0,0,0.8)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 2,
-  },
-  stackCol: {
-    gap: 8,
-  },
-  barRow: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'center',
-    gap: 8,
-  },
-  btn: {
-    minHeight: 40,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    borderRadius: 6,
-    borderWidth: 2.5,
-    alignItems: 'center',
-    justifyContent: 'center',
-    // sombra tipo placa
-    shadowColor: '#000',
-    shadowOpacity: 0.45,
-    shadowRadius: 4,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 4,
-  },
-  btnSelected: {
-    borderWidth: 3,
-    transform: [{ scale: 1.04 }],
-  },
-  btnPressed: {
-    opacity: 0.9,
-    transform: [{ scale: 0.97 }],
-  },
-  btnDisabled: {
-    opacity: 0.35,
-  },
-  btnText: {
-    fontSize: 13,
-    fontWeight: '900',
-    letterSpacing: 1.2,
-  },
-  hint: {
-    color: '#9a9690',
-    fontSize: 9,
-    marginTop: 1,
-  },
+	row: {
+		flexDirection: 'row',
+		alignItems: 'center',
+		justifyContent: 'center',
+		gap: 10,
+		flexWrap: 'wrap',
+	},
+	skill: {
+		width: 64,
+		height: 64,
+		borderWidth: 4,
+		borderColor: '#F0ECE5',
+		backgroundColor: '#171717',
+		padding: 3,
+		elevation: 5,
+		shadowColor: '#000',
+		shadowOpacity: 0.45,
+		shadowRadius: 4,
+		shadowOffset: { width: 0, height: 2 },
+	},
+	iconFace: {
+		flex: 1,
+		alignItems: 'center',
+		justifyContent: 'center',
+		borderWidth: 1,
+		borderColor: '#1A1512',
+	},
+	glyph: {
+		fontSize: 26,
+		color: '#FFF4E8',
+		textShadowColor: '#000',
+		textShadowRadius: 3,
+		textShadowOffset: { width: 0, height: 1 },
+	},
+	cost: {
+		position: 'absolute',
+		bottom: 2,
+		left: 2,
+		right: 2,
+		color: '#E8E4DF',
+		fontSize: 8,
+		fontWeight: '800',
+		textAlign: 'center',
+		textShadowColor: '#000',
+		textShadowRadius: 3,
+	},
+	targetDot: {
+		position: 'absolute',
+		top: 4,
+		right: 4,
+		width: 8,
+		height: 8,
+		borderRadius: 4,
+		backgroundColor: '#4D83FF',
+		borderWidth: 1,
+		borderColor: '#FFF',
+	},
+	selected: {
+		borderColor: '#F4B52B',
+		borderWidth: 5,
+		transform: [{ scale: 1.08 }],
+	},
+	disabled: { opacity: 0.35 },
+
+	legacyCol: { gap: 8, minWidth: 100 },
+	actorLabel: {
+		color: '#c9a227',
+		fontSize: 11,
+		fontWeight: '800',
+		textAlign: 'center',
+	},
+	legacyBtn: {
+		flexDirection: 'row',
+		alignItems: 'center',
+		gap: 8,
+		paddingVertical: 8,
+		paddingHorizontal: 10,
+		borderWidth: 2,
+		borderRadius: 6,
+		backgroundColor: 'rgba(20,18,16,0.85)',
+	},
+	legacyGlyph: { fontSize: 18 },
+	legacyName: {
+		color: '#e8e6e3',
+		fontSize: 12,
+		fontWeight: '800',
+	},
 });

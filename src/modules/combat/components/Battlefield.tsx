@@ -395,46 +395,53 @@ export function Battlefield({
 }
 
 const styles = StyleSheet.create({
+	/**
+	 * Disposición tipo referencia 16:9:
+	 * enemigos ~y 27% (banda superior), espacio central para iconos de acción,
+	 * héroes ~y 78% (banda inferior).
+	 */
 	root: {
 		flex: 1,
-		paddingTop: 52,
-		paddingHorizontal: 16,
-		paddingBottom: 20,
+		paddingTop: 48,
+		paddingHorizontal: 12,
+		paddingBottom: 8,
 		justifyContent: 'space-between',
 	},
 	enemyZone: {
-		flex: 1.15,
-		minHeight: 180,
-		justifyContent: 'flex-start',
-		alignItems: 'flex-end',
-		paddingRight: 16,
-		paddingLeft: 72,
-		paddingTop: 8,
+		flex: 0.95,
+		minHeight: 150,
+		maxHeight: '38%',
+		justifyContent: 'center',
+		alignItems: 'center',
+		paddingHorizontal: 24,
+		paddingTop: 4,
 	},
 	enemyLayer: {
 		flexDirection: 'row',
 		flexWrap: 'nowrap',
-		justifyContent: 'flex-end',
+		justifyContent: 'center',
 		alignItems: 'flex-end',
-		gap: 16,
+		gap: 18,
 	},
 	mid: {
-		flex: 0.35,
-		minHeight: 12,
+		flex: 0.55,
+		minHeight: 72,
 	},
 	heroZone: {
-		flex: 1.25,
-		minHeight: 180,
-		justifyContent: 'center',
-		paddingBottom: 12,
-		paddingRight: 100,
+		flex: 1.05,
+		minHeight: 160,
+		maxHeight: '42%',
+		justifyContent: 'flex-end',
+		alignItems: 'center',
+		paddingBottom: 8,
+		paddingHorizontal: 20,
 	},
 	row: {
 		flexDirection: 'row',
 		flexWrap: 'wrap',
-		justifyContent: 'flex-start',
+		justifyContent: 'center',
 		alignItems: 'flex-end',
-		gap: 20,
+		gap: 22,
 	},
 	token: {
 		alignItems: 'center',
