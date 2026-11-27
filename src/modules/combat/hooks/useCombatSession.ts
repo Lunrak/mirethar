@@ -48,6 +48,8 @@ export type CombatSessionConfig = {
   enemiesActFirst?: boolean;
   /** Solo frente de marcha puede ser objetivo (default true si ambush). */
   ambushFrontOnly?: boolean;
+  /** Sala vs pasillo (ranged / posiciones de marcha). */
+  location?: 'room' | 'corridor';
 };
 
 export type CombatSession = {
@@ -194,6 +196,7 @@ function initFromConfig(config: CombatSessionConfig = {}): {
   let state = createCombat(party, enemies, positions, {
     ambush: enemiesFirst,
     ambushFrontOnly: frontOnly,
+    location: config.location ?? 'room',
   });
 
   if (enemiesFirst) {

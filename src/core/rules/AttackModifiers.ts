@@ -10,13 +10,30 @@ export type AttackModContext = {
   enemiesOutnumbered?: boolean;
   /** Primer turno / posible sorpresa */
   isSurpriseRound?: boolean;
-  /** El atacante está en retaguardia (pasillo) y usa arma a distancia */
+  /** El atacante está en retaguardia (pasillo) */
   attackerInRear?: boolean;
-  /** En pasillo: solo frente puede atacar cuerpo a cuerpo */
+  /** El atacante está en el frente de marcha */
+  attackerInFront?: boolean;
+  /** En pasillo: frente CQC, retaguardia a distancia */
   inCorridor?: boolean;
+  /**
+   * En sala: true solo en ronda 1 (se permiten arcos/hondas).
+   * En rondas posteriores debe ser false → bloquea ranged.
+   */
+  roomRangedAllowed?: boolean;
+  /** Sala (no pasillo) */
+  inRoom?: boolean;
   /** Modificadores extra manuales */
   extra?: number;
 };
+
+/** ¿El héroe empuña arma a distancia? */
+export function heroUsesRanged(actor: Hero): boolean {
+  const tags =
+    (actor.equipment?.mainHand as Item & { tags?: string[] } | undefined)?.tags ??
+    [];
+  return tags.includes('ranged') || tags.includes('bow') || tags.includes('sling');
+}
 
 export type AttackModifierBreakdown = {
   classMod: number;
@@ -159,22 +176,53 @@ export function getSituationalAttackMod(
 ): { mod: number; notes: string[]; blocked: boolean; blockReason?: string } {
   const notes: string[] = [];
   let mod = 0;
+  const ranged = isRanged(actor);
 
-  // Pasillo: retaguardia solo puede atacar con ranged o hechizos
-  if (ctx.inCorridor && ctx.attackerInRear) {
-    if (!isRanged(actor)) {
+  // —— Pasillo (todo el combate) ——
+  // Posiciones 1–2: solo cuerpo a cuerpo; 3–4: solo a distancia
+  if (ctx.inCorridor) {
+    if (ctx.attackerInRear) {
+      if (!ranged) {
+        return {
+          mod: 0,
+          notes,
+          blocked: true,
+          blockReason:
+            'En pasillo, la retaguardia (3–4) solo ataca a distancia (arco/honda) o con hechizos',
+        };
+      }
+      notes.push('Pasillo · retaguardia a distancia');
+    } else if (ctx.attackerInFront || !ctx.attackerInRear) {
+      // Frente de marcha: no armas a distancia
+      if (ranged) {
+        return {
+          mod: 0,
+          notes,
+          blocked: true,
+          blockReason:
+            'En pasillo, el frente (1–2) combate cuerpo a cuerpo (sin arco/honda)',
+        };
+      }
+      notes.push('Pasillo · frente cuerpo a cuerpo');
+    }
+  }
+
+  // —— Sala: ranged solo en la primera ronda ——
+  if (ctx.inRoom && ranged) {
+    if (ctx.roomRangedAllowed === false) {
       return {
         mod: 0,
         notes,
         blocked: true,
-        blockReason: 'In corridor, rear rank can only attack with bow/sling or spells',
+        blockReason:
+          'En sala, las armas a distancia solo se usan en el primer asalto; ahora es cuerpo a cuerpo',
       };
     }
-    notes.push('Rear rank ranged attack (corridor)');
+    if (ctx.roomRangedAllowed === true || ctx.isSurpriseRound) {
+      notes.push('Sala · primer asalto a distancia');
+    }
   }
 
-  // Sorpresa: el que sorprende actúa primero; no hay mod numérico estándar al ataque
-  // (la ventaja es de iniciativa). Se documenta.
   if (ctx.isSurpriseRound) {
     notes.push('Surprise round (acts first)');
   }

@@ -335,9 +335,26 @@ export function executeHeroAttack(
   const target = state.enemies.find((e) => e.id === state.selectedTargetId);
   if (!actor || !target) return state;
 
+  const location = state.location ?? 'room';
+  const inCorridor = location === 'corridor';
+  const inRoom = location === 'room';
+  const frontIds = state.positions?.front ?? [];
+  const rearIds = state.positions?.rear ?? [];
+  const attackerInFront = frontIds.includes(actor.id);
+  const attackerInRear =
+    rearIds.includes(actor.id) || (!attackerInFront && rearIds.length > 0);
+
   const fullCtx: AttackModContext = {
     ...ctx,
     enemiesOutnumbered: ctx.enemiesOutnumbered ?? isPartyOutnumbering(state),
+    inCorridor: ctx.inCorridor ?? inCorridor,
+    inRoom: ctx.inRoom ?? inRoom,
+    attackerInFront: ctx.attackerInFront ?? attackerInFront,
+    attackerInRear: ctx.attackerInRear ?? attackerInRear,
+    // Sala: solo ronda 1 permite arco/honda
+    roomRangedAllowed:
+      ctx.roomRangedAllowed ?? (inRoom ? state.round <= 1 : undefined),
+    isSurpriseRound: ctx.isSurpriseRound ?? (inRoom && state.round <= 1),
   };
 
   const result = resolveAttack({
@@ -600,11 +617,13 @@ export function runEnemyTurn(
     ...state.positions.front,
     ...state.positions.rear.filter((id) => !state.positions.front.includes(id)),
   ];
-  // Emboscada al revisitar: solo los 2 primeros del orden de marcha (frente)
-  const frontOnly = state.ambushFrontOnly
-    ? (state.positions.front.length
-        ? state.positions.front.slice(0, 2)
-        : marchOrder.slice(0, 2))
+  // Emboscada o pasillo: solo el frente (posiciones 1–2) recibe ataques cuerpo a cuerpo
+  const restrictToFront =
+    !!state.ambushFrontOnly || state.location === 'corridor';
+  const frontOnly = restrictToFront
+    ? state.positions.front.length
+      ? state.positions.front.slice(0, 2)
+      : marchOrder.slice(0, 2)
     : null;
   const targetOrder =
     frontOnly && frontOnly.length > 0
@@ -616,6 +635,10 @@ export function runEnemyTurn(
   if (state.ambushFrontOnly) {
     logEntries.push(
       log('Emboscada: los enemigos solo atacan a los 2 primeros del orden de marcha.'),
+    );
+  } else if (state.location === 'corridor') {
+    logEntries.push(
+      log('Pasillo: los enemigos solo pueden alcanzar al frente de marcha (1–2).'),
     );
   }
 

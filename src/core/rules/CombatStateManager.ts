@@ -29,6 +29,7 @@ export type CombatAction =
         positions?: { front: string[]; rear: string[] };
         ambush?: boolean;
         ambushFrontOnly?: boolean;
+        location?: 'room' | 'corridor';
       };
     }
   | { type: 'SELECT_ACTION'; payload: Action }
@@ -96,13 +97,19 @@ export const initialCombatState: CombatState = {
 export function combatReducer(state: CombatState, action: CombatAction): CombatState {
   switch (action.type) {
     case 'CREATE_COMBAT': {
-      const { heroes, enemies, positions, ambush, ambushFrontOnly } = action.payload;
+      const { heroes, enemies, positions, ambush, ambushFrontOnly, location } =
+        action.payload;
       const heroTurnOrder = buildHeroTurnOrder(heroes);
       const firstHeroId = heroTurnOrder[0] ?? null;
       const pos = positions ?? {
         front: heroes.slice(0, 2).map((h) => h.id),
         rear: heroes.slice(2).map((h) => h.id),
       };
+      const loc = location ?? 'room';
+      const locNote =
+        loc === 'corridor'
+          ? 'Pasillo: frente (1–2) cuerpo a cuerpo; retaguardia (3–4) a distancia.'
+          : 'Sala: armas a distancia solo en el primer asalto.';
 
       const base = {
         id: `combat_${Date.now().toString(36)}`,
@@ -126,6 +133,7 @@ export function combatReducer(state: CombatState, action: CombatAction): CombatS
                 : 'Los enemigos actúan primero.'
               : 'Combate iniciado',
           ),
+          createLogEntry(locNote),
         ],
         isFinished: false,
         result: null as 'victory' | 'defeat' | null,
@@ -139,6 +147,7 @@ export function combatReducer(state: CombatState, action: CombatAction): CombatS
         ambush: !!ambush,
         // Solo restringir a frente si se pide explícitamente (o ambush clásico)
         ambushFrontOnly: !!(ambushFrontOnly ?? false),
+        location: loc,
       };
       // Miradas Medusa / Catoblepas al inicio
       let opened = applyOpeningToCombatState(base);
@@ -297,7 +306,11 @@ export function createCombat(
   heroes: Hero[],
   enemies: EnemyInstance[],
   positions?: { front: string[]; rear: string[] },
-  opts?: { ambush?: boolean; ambushFrontOnly?: boolean },
+  opts?: {
+    ambush?: boolean;
+    ambushFrontOnly?: boolean;
+    location?: 'room' | 'corridor';
+  },
 ): CombatState {
   return combatReducer(initialCombatState, {
     type: 'CREATE_COMBAT',
@@ -307,6 +320,7 @@ export function createCombat(
       positions,
       ambush: opts?.ambush,
       ambushFrontOnly: opts?.ambushFrontOnly ?? opts?.ambush,
+      location: opts?.location,
     },
   });
 }

@@ -144,6 +144,10 @@ export default function App() {
 			dungeonMap?.partyHeroes && dungeonMap.partyHeroes.length > 0
 				? dungeonMap.partyHeroes
 				: createDefaultParty();
+		const cellKind = pending.map.cells[pending.map.partyCellId]?.kind ?? 'room';
+		const location: 'room' | 'corridor' =
+			cellKind === 'corridor' ? 'corridor' : 'room';
+
 		const config: CombatSessionConfig = {
 			heroes,
 			enemies: pending.encounter.enemies,
@@ -153,6 +157,7 @@ export default function App() {
 			enemiesActFirst: pending.enemiesActFirst,
 			// Solo emboscada real limita objetivos al frente de marcha
 			ambushFrontOnly: pending.ambush ? true : false,
+			location,
 			positions: {
 				front: heroes.slice(0, 2).map((h) => h.id),
 				rear: heroes.slice(2).map((h) => h.id),

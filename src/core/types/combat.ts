@@ -122,6 +122,13 @@ export type CombatState = {
 	ambush?: boolean;
 	/** Solo los 2 primeros del orden de marcha pueden ser objetivo enemigo */
 	ambushFrontOnly?: boolean;
+	/**
+	 * Lugar del combate (4AD):
+	 * - room: armas a distancia solo en la ronda 1; luego cuerpo a cuerpo
+	 * - corridor: frente (1–2) cuerpo a cuerpo; retaguardia (3–4) a distancia
+	 */
+	location?: 'room' | 'corridor';
+
 	/** Acciones del turno enemigo para feedback cinematográfico */
 	enemyBeats?: {
 		actorId: string;
