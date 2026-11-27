@@ -89,7 +89,7 @@ Este README resume el alcance del **manual básico 4AD** como lista de puntos a 
 - [x] Forzar **reacción** al inicio de cada encuentro en el flow UI (servicio listo; no siempre se aplica antes del combate)
 - [x] Combate en **pasillo** completo: solo posiciones 1–2 atacan cuerpo a cuerpo; 3–4 con a distancia / hechizos según manual
 - [x] Armas a distancia: uso restringido al primer asalto / skirmish según reglas de sala vs pasillo
-- [ ] Excepción **HATE** (ataques extra siempre a la clase odiada) en la distribución de objetivos
+- [x] Excepción **HATE** (ataques extra siempre a la clase odiada) en la distribución de objetivos
 - [ ] Elección manual del jugador de quién se salva / recibe ataques extra (ahora heurística tank/front)
 
 ### Tablas y botín

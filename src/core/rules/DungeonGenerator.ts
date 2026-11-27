@@ -220,6 +220,171 @@ function worldPos(
   return { x: originX + ox, y: originY + oy };
 }
 
+export type ShapeViability = {
+  ok: boolean;
+  reason?: string;
+  /** Celdas del cuerpo que sí cabrían (solo informativo si !ok) */
+  placeableCount: number;
+  requiredCount: number;
+};
+
+/**
+ * Comprueba si una forma es viable ANTES de generar contenido o revelar:
+ * - unión (gap) libre y en mapa
+ * - TODAS las casillas del cuerpo en mapa y libres
+ * - el cuerpo no toca otra región (salvo la unión)
+ */
+export function checkShapeViability(
+  cells: Record<string, MapCell>,
+  originX: number,
+  originY: number,
+  gapX: number,
+  gapY: number,
+  shape: ShapeRoll,
+): ShapeViability {
+  if (!inBounds(gapX, gapY)) {
+    return {
+      ok: false,
+      reason: 'La unión sale del mapa',
+      placeableCount: 0,
+      requiredCount: shape.offsets.length,
+    };
+  }
+  if (occupied(cells, gapX, gapY)) {
+    return {
+      ok: false,
+      reason: 'La casilla de unión está ocupada',
+      placeableCount: 0,
+      requiredCount: shape.offsets.length,
+    };
+  }
+
+  const required = shape.offsets.length;
+  let placeable = 0;
+  const bodyKeys: string[] = [];
+
+  for (const off of shape.offsets) {
+    const x = originX + off.x;
+    const y = originY + off.y;
+    if (!inBounds(x, y)) {
+      return {
+        ok: false,
+        reason: `La forma «${shape.label}» no cabe en el mapa (${required} casillas)`,
+        placeableCount: placeable,
+        requiredCount: required,
+      };
+    }
+    if (occupied(cells, x, y)) {
+      return {
+        ok: false,
+        reason: `Hay una pieza bloqueando «${shape.label}»`,
+        placeableCount: placeable,
+        requiredCount: required,
+      };
+    }
+    bodyKeys.push(cellKey(x, y));
+    placeable++;
+  }
+
+  const bodySet = new Set(bodyKeys);
+  const gapId = cellKey(gapX, gapY);
+
+  for (const key of bodyKeys) {
+    const [xs, ys] = key.split(',').map(Number);
+    // cellKey format — use parse from body
+    void xs;
+    void ys;
+  }
+
+  for (const off of shape.offsets) {
+    const x = originX + off.x;
+    const y = originY + off.y;
+    for (const dir of ['N', 'E', 'S', 'W'] as Dir[]) {
+      const { dx, dy } = DIR_DELTA[dir];
+      const nx = x + dx;
+      const ny = y + dy;
+      const nid = cellKey(nx, ny);
+      if (nid === gapId) continue;
+      if (bodySet.has(nid)) continue;
+      const other = cells[nid];
+      if (other?.revealed && other.regionId) {
+        return {
+          ok: false,
+          reason: `«${shape.label}» quedaría pegada a otra pieza (hace falta hueco)`,
+          placeableCount: placeable,
+          requiredCount: required,
+        };
+      }
+    }
+  }
+
+  return { ok: true, placeableCount: placeable, requiredCount: required };
+}
+
+/** Forma mínima de respaldo (pasillo 1×1) orientada a `through`. */
+function minimalCorridorShape(through: Dir): ShapeRoll {
+  const back = OPPOSITE[through];
+  return {
+    kind: 'corridor',
+    label: 'pasillo corto',
+    offsets: [{ x: 0, y: 0, kind: 'corridor', doors: [back, through] }],
+  };
+}
+
+/**
+ * Elige una forma viable: primero la tirada, luego reintentos, luego pasillo 1×1.
+ * No genera contenido; solo geometría.
+ */
+export function pickViableShapeBeyondDoor(
+  cells: Record<string, MapCell>,
+  originX: number,
+  originY: number,
+  gapX: number,
+  gapY: number,
+  through: Dir,
+  rng?: () => number,
+  maxAttempts = 6,
+): { shape: ShapeRoll; viability: ShapeViability } | null {
+  const tried: ShapeRoll[] = [];
+  for (let i = 0; i < maxAttempts; i++) {
+    const shape = rollShapeBeyondDoor(through, rng);
+    tried.push(shape);
+    const v = checkShapeViability(cells, originX, originY, gapX, gapY, shape);
+    if (v.ok) return { shape, viability: v };
+  }
+  // Último recurso: pasillo mínimo
+  const fallback = minimalCorridorShape(through);
+  const vf = checkShapeViability(cells, originX, originY, gapX, gapY, fallback);
+  if (vf.ok) return { shape: fallback, viability: vf };
+  return null;
+}
+
+function blockDoorResult(
+  map: DungeonMap,
+  door: Door,
+  doorId: string,
+  from: MapCell,
+  message: string,
+): GenerateResult {
+  const doorsBlocked = {
+    ...map.doors,
+    [doorId]: { ...door, state: 'blocked' as const },
+  };
+  const fromCell = {
+    ...from,
+    doors: from.doors.filter((d) => d !== door.dir),
+  };
+  return {
+    map: {
+      ...map,
+      cells: { ...map.cells, [from.id]: fromCell },
+      doors: doorsBlocked,
+    },
+    newCellIds: [],
+    message,
+  };
+}
+
 /**
  * Abre una puerta cerrada, genera lo que hay detrás y mueve al grupo.
  */
@@ -273,77 +438,56 @@ export function openDoor(
 
   // Unión o primera casilla del cuerpo fuera del mapa → puerta bloqueada
   if (!inBounds(gapX, gapY) || !inBounds(originX, originY)) {
-    const doorsBlocked = {
-      ...map.doors,
-      [doorId]: { ...door, state: 'blocked' as const },
-    };
-    const fromCell = { ...from, doors: from.doors.filter((d) => d !== door.dir) };
-    return {
-      map: {
-        ...map,
-        cells: { ...map.cells, [from.id]: fromCell },
-        doors: doorsBlocked,
-      },
-      newCellIds: [],
-      message: `La puerta al ${door.dir} da al límite del mapa (28×20). Está bloqueada; buscad otro camino.`,
-    };
+    return blockDoorResult(
+      map,
+      door,
+      doorId,
+      from,
+      `La puerta al ${door.dir} da al límite del mapa (28×20). Está bloqueada; buscad otro camino.`,
+    );
   }
 
   // Si el hueco o el origen ya están ocupados, no se puede unir
   if (occupied(map.cells, gapX, gapY) || occupied(map.cells, originX, originY)) {
-    const doorsBlocked = {
-      ...map.doors,
-      [doorId]: { ...door, state: 'blocked' as const },
-    };
-    const fromCell = { ...from, doors: from.doors.filter((d) => d !== door.dir) };
-    return {
-      map: {
-        ...map,
-        cells: { ...map.cells, [from.id]: fromCell },
-        doors: doorsBlocked,
-      },
-      newCellIds: [],
-      message: `No hay hueco libre tras la puerta (${door.dir}) para unir otra pieza. Buscad otro camino.`,
-    };
+    return blockDoorResult(
+      map,
+      door,
+      doorId,
+      from,
+      `No hay hueco libre tras la puerta (${door.dir}) para unir otra pieza. Buscad otro camino.`,
+    );
   }
 
-  const shape = rollShapeBeyondDoor(door.dir, rng);
-  // Cuerpo relativo al origen (2 casillas más allá de la puerta de origen)
-  const absOffsets = shape.offsets
-    .map((off) => ({
-      ...off,
-      ax: originX + off.x,
-      ay: originY + off.y,
-    }))
-    .filter((o) => inBounds(o.ax, o.ay));
+  /**
+   * 1) Comprobar viabilidad de la forma (completa, con gap).
+   * 2) Solo si cabe → generar contenido y revelar.
+   * No se muestra overlay ni encuentro si la pieza no es viable.
+   */
+  const picked = pickViableShapeBeyondDoor(
+    map.cells,
+    originX,
+    originY,
+    gapX,
+    gapY,
+    door.dir,
+    rng,
+  );
 
-  if (absOffsets.length === 0 || !absOffsets.some((o) => o.ax === originX && o.ay === originY)) {
-    const doorsBlocked = {
-      ...map.doors,
-      [doorId]: { ...door, state: 'blocked' as const },
-    };
-    const fromCell = { ...from, doors: from.doors.filter((d) => d !== door.dir) };
-    return {
-      map: {
-        ...map,
-        cells: { ...map.cells, [from.id]: fromCell },
-        doors: doorsBlocked,
-      },
-      newCellIds: [],
-      message: `No hay espacio en el mapa para lo que hay tras la puerta (${door.dir}). Buscad otro camino.`,
-    };
+  if (!picked) {
+    return blockDoorResult(
+      map,
+      door,
+      doorId,
+      from,
+      `No hay espacio viable tras la puerta (${door.dir}) para ninguna pieza. Puerta bloqueada; buscad otro camino.`,
+    );
   }
 
+  const shape = picked.shape;
+  // Forma íntegra (sin recortar): la viabilidad ya garantizó todas las casillas
   const cells = { ...map.cells };
   const doors = { ...map.doors };
   const newCellIds: string[] = [];
-  // Usar solo offsets que caben
-  shape.offsets = absOffsets.map(({ ax, ay, kind, doors: ds }) => ({
-    x: ax - originX,
-    y: ay - originY,
-    kind,
-    doors: ds,
-  }));
 
   const contentLogs: string[] = [];
   let pendingEncounter: ResolvedContent | null = null;
@@ -409,29 +553,11 @@ export function openDoor(
     quests = advanceAllQuests(quests, 'find_treasure');
   }
 
-  // Casillas de la pieza (solo forma); mismo contenido y regionId
+  // Casillas de la pieza (viabilidad ya comprobada: todas libres y en mapa)
   const regionKeys = new Set<string>();
   for (const off of shape.offsets) {
     const { x, y } = worldPos(originX, originY, off.x, off.y);
     const id = cellKey(x, y);
-    if (occupied(cells, x, y)) continue;
-    if (!inBounds(x, y)) continue;
-    // Evitar pegar el cuerpo a otra pieza (dejar al menos 1 casilla de aire salvo la unión)
-    let touchesForeign = false;
-    for (const d of ['N', 'E', 'S', 'W'] as Dir[]) {
-      const { dx: tdx, dy: tdy } = DIR_DELTA[d];
-      const tx = x + tdx;
-      const ty = y + tdy;
-      const tid = cellKey(tx, ty);
-      if (tid === cellKey(gapX, gapY)) continue; // la unión es el puente permitido
-      const other = cells[tid];
-      if (other?.revealed && other.regionId && other.regionId !== regionId) {
-        touchesForeign = true;
-        break;
-      }
-    }
-    if (touchesForeign) continue;
-
     regionKeys.add(id);
     let cell: MapCell = {
       id,
@@ -450,23 +576,16 @@ export function openDoor(
     newCellIds.push(id);
   }
 
-  // Si no quedó ni la casilla de entrada del cuerpo, abortar
   const entryId = cellKey(originX, originY);
   if (!cells[entryId]) {
-    const doorsBlocked = {
-      ...map.doors,
-      [doorId]: { ...door, state: 'blocked' as const },
-    };
-    const fromCell = { ...from, doors: from.doors.filter((d) => d !== door.dir) };
-    return {
-      map: {
-        ...map,
-        cells: { ...map.cells, [from.id]: fromCell },
-        doors: doorsBlocked,
-      },
-      newCellIds: [],
-      message: `La nueva pieza choca con otra (hace falta 1 casilla de hueco). Puerta al ${door.dir} bloqueada.`,
-    };
+    // No debería ocurrir tras checkShapeViability; defensa en profundidad
+    return blockDoorResult(
+      map,
+      door,
+      doorId,
+      from,
+      `Error de colocación tras la puerta (${door.dir}). Puerta bloqueada.`,
+    );
   }
 
   // Casilla de unión en el gap: ahí se “corre” la puerta que une las dos piezas
