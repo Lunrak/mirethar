@@ -280,14 +280,23 @@ export default function DungeonScreen({
 				</View>
 			)}
 
-			<View style={styles.body}>
-				<View style={styles.mapPane}>
-					<DungeonMapView
-						map={map}
-						onSelectCell={handleSelectCell}
-						onOpenDoor={handleOpenDoor}
-					/>
-				</View>
+			{/* Mapa a pantalla completa (fondo + niebla); UI encima */}
+			<View style={styles.mapBackdrop}>
+				<DungeonMapView
+					map={map}
+					onSelectCell={handleSelectCell}
+					onOpenDoor={handleOpenDoor}
+				/>
+			</View>
+
+			<View
+				style={styles.body}
+				pointerEvents="box-none"
+			>
+				<View
+					style={styles.mapSpacer}
+					pointerEvents="none"
+				/>
 
 				<View style={styles.side}>
 					<Text style={styles.sideTitle}>Puertas aquí</Text>
@@ -733,7 +742,16 @@ export default function DungeonScreen({
 }
 
 const styles = StyleSheet.create({
-	root: { flex: 1, backgroundColor: '#1a1a1e' },
+	root: { flex: 1, backgroundColor: '#000000' },
+	mapBackdrop: {
+		position: 'absolute',
+		left: 0,
+		right: 0,
+		top: 0,
+		bottom: 0,
+		zIndex: 0,
+	},
+	mapSpacer: { flex: 1 },
 	header: {
 		height: 52,
 		paddingHorizontal: 16,
@@ -741,7 +759,9 @@ const styles = StyleSheet.create({
 		alignItems: 'center',
 		justifyContent: 'space-between',
 		borderBottomWidth: 1,
-		borderBottomColor: '#2a2a32',
+		borderBottomColor: 'rgba(42,42,50,0.85)',
+		backgroundColor: 'rgba(10,10,14,0.72)',
+		zIndex: 2,
 	},
 	title: { color: '#e8e6e3', fontSize: 18, fontWeight: '800' },
 	sub: { color: '#9a9690', fontSize: 12, marginTop: 2 },
@@ -773,13 +793,17 @@ const styles = StyleSheet.create({
 	},
 	entranceName: { color: '#e8e6e3', fontSize: 16, fontWeight: '700' },
 	entranceBlurb: { color: '#9a9690', fontSize: 13, marginTop: 2 },
-	body: { flex: 1, flexDirection: 'row' },
-	mapPane: { flex: 1.4 },
+	body: {
+		flex: 1,
+		flexDirection: 'row',
+		zIndex: 1,
+	},
 	side: {
 		width: 200,
 		borderLeftWidth: 1,
-		borderLeftColor: '#2a2a32',
+		borderLeftColor: 'rgba(42,42,50,0.9)',
 		padding: 10,
+		backgroundColor: 'rgba(12,12,16,0.82)',
 	},
 	sideTitle: {
 		color: '#c9a227',
