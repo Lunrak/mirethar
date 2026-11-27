@@ -5,6 +5,7 @@
  */
 
 import { rollWithExplosiveSix } from './DiceService';
+import { isOverencumbered } from './InventoryService';
 import type { DiceResult, EnemyInstance, Hero, Item } from '../types/combat';
 
 export type DefenseContext = {
@@ -115,7 +116,8 @@ export function getRacialDefenseMod(
 }
 
 export function getSituationalDefenseMod(
-  ctx: DefenseContext = {}
+  ctx: DefenseContext = {},
+  hero?: Hero,
 ): { mod: number; notes: string[] } {
   const notes: string[] = [];
   let mod = 0;
@@ -127,6 +129,11 @@ export function getSituationalDefenseMod(
   if (ctx.extra) {
     mod += ctx.extra;
     notes.push(`Extra ${ctx.extra > 0 ? '+' : ''}${ctx.extra}`);
+  }
+  // 4AD: sobrecarga (más de 3 armas / 2 escudos / 200 gp) → −1 Defensa
+  if (hero?.inventory && isOverencumbered(hero.inventory)) {
+    mod -= 1;
+    notes.push('Sobrecarga −1');
   }
 
   return { mod, notes };
@@ -140,7 +147,7 @@ export function computeDefenseModifiers(
   const shield = getShieldDefenseMod(hero, ctx);
   const classMod = getClassDefenseMod(hero);
   const racial = getRacialDefenseMod(hero, ctx);
-  const situ = getSituationalDefenseMod(ctx);
+  const situ = getSituationalDefenseMod(ctx, hero);
 
   return {
     armorMod: armor.mod,

@@ -44,6 +44,10 @@ import {
   moraleDisplayName,
 } from './MoraleService';
 import { getEnemyMaxLife, getEnemyTemplate } from '../data/enemyLookup';
+import {
+  ensureHeroInventory,
+  equipWeapon,
+} from './InventoryService';
 import type {
   Action,
   CombatLogEntry,
@@ -814,6 +818,10 @@ export function resolveCurrentHeroAction(
     return executeSpell(state, targetType, rng);
   }
 
+  if (actionType === 'switch_weapon') {
+    return executeSwitchWeapon(state);
+  }
+
   // Defend u otras acciones: consumen el turno
   const next = {
     ...state,
@@ -824,6 +832,57 @@ export function resolveCurrentHeroAction(
     selectedAction: null,
     selectedTargetId: null,
     phase: 'resolution' as const,
+  };
+  return advanceAfterHeroAction(next);
+}
+
+/**
+ * 4AD: cambiar de arma gasta el turno (no se ataca).
+ * Cicla a la siguiente arma del inventario o usa selectedTargetId como instanceId.
+ */
+export function executeSwitchWeapon(state: CombatState): CombatState {
+  const actor = state.heroes.find((h) => h.id === state.currentActorId);
+  if (!actor) return state;
+
+  const h = ensureHeroInventory(actor);
+  const weapons = h.inventory.weapons;
+  if (weapons.length < 2) {
+    const next: CombatState = {
+      ...state,
+      log: [
+        ...state.log,
+        log(`${actor.name} no tiene otra arma que empuñar.`),
+      ],
+      selectedAction: null,
+      selectedTargetId: null,
+    };
+    return advanceAfterHeroAction(next);
+  }
+
+  const preferred = state.selectedTargetId;
+  let nextId =
+    preferred && weapons.some((w) => w.instanceId === preferred)
+      ? preferred
+      : null;
+  if (!nextId) {
+    const cur = h.inventory.defaultWeaponInstanceId;
+    const idx = Math.max(
+      0,
+      weapons.findIndex((w) => w.instanceId === cur),
+    );
+    nextId = weapons[(idx + 1) % weapons.length].instanceId;
+  }
+
+  const result = equipWeapon(h, nextId);
+  const heroes = state.heroes.map((x) =>
+    x.id === actor.id ? result.hero : x,
+  );
+  const next: CombatState = {
+    ...state,
+    heroes,
+    log: [...state.log, log(result.message)],
+    selectedAction: null,
+    selectedTargetId: null,
   };
   return advanceAfterHeroAction(next);
 }

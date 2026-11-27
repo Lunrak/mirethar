@@ -9,6 +9,7 @@
 import { ITEMS } from './items';
 import type { Item, EquipmentSlot } from './items';
 import type { Hero } from '../types/combat';
+import { inventoryFromEquipment } from '../rules/InventoryService';
 
 export type HeroClass = 'warrior' | 'rogue' | 'cleric' | 'wizard';
 
@@ -130,10 +131,21 @@ export function createHero(
   for (const itemId of def.startingEquipmentIds) {
     const item = ITEMS[itemId];
     if (!item) continue;
-    // Asigna al primer slot libre del item
-    const slot = item.slots[0];
-    equipment[slot] = item;
+    // Asigna a todos los slots que ocupe (2H / arco → main + off)
+    for (const slot of item.slots) {
+      if (slot === 'misc' || slot === 'spellbook') {
+        if (!equipment[slot]) equipment[slot] = item;
+      } else {
+        equipment[slot] = item;
+      }
+    }
   }
+
+  // Riqueza inicial aproximada 4AD (media de 2d6 / 3d6 / 4d6)
+  const startingGold =
+    heroClass === 'wizard' ? 14 : heroClass === 'rogue' ? 10 : 7;
+
+  const inventory = inventoryFromEquipment(equipment, startingGold);
 
   return {
     id:
@@ -145,6 +157,7 @@ export function createHero(
     life,
     maxLife: life,
     equipment,
+    inventory,
     spells: def.startingSpells ? [...def.startingSpells] : undefined,
     healingUsesLeft: heroClass === 'cleric' ? 3 : undefined,
     status: [],

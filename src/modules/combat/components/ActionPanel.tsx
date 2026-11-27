@@ -40,6 +40,9 @@ function iconFor(action: Action): { glyph: string; accent: string } {
 	if (action.type === 'pickup_body') {
 		return { glyph: '†', accent: '#8a7a6a' };
 	}
+	if (action.type === 'switch_weapon' || n.includes('cambiar arma')) {
+		return { glyph: '🗡', accent: '#8a6a3a' };
+	}
 	if (n.includes('defend') || n.includes('protect') || n.includes('focus')) {
 		return { glyph: '🛡', accent: '#557B36' };
 	}

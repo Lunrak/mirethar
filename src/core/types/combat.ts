@@ -65,6 +65,11 @@ export type Hero = {
 	life: number;
 	maxLife: number;
 	equipment: Partial<Record<EquipmentSlot, Item>>;
+	/**
+	 * Inventario 4AD: armas (máx. 3 slots; 2H=2), escudos (máx. 2),
+	 * oro (máx. 200), gear y consumibles. Ver InventoryService.
+	 */
+	inventory?: import('../rules/InventoryService').HeroInventory;
 	/** Hechizos preparados (wizard) */
 	spells?: string[];
 	/** Usos de Healing restantes del clérigo (3 por aventura) */

@@ -96,11 +96,21 @@ export default function CombatScreen({
 				requiresTarget: true,
 			});
 		}
+		// 4AD: cambiar arma gasta el turno
+		const weaponCount = currentHero?.inventory?.weapons?.length ?? 0;
+		if (currentHero && weaponCount > 1) {
+			list.push({
+				type: 'switch_weapon',
+				name: 'Cambiar arma',
+				requiresTarget: false,
+			});
+		}
 		return list;
 	}, [
 		currentHero?.class,
 		currentHero?.id,
 		currentHero?.isFallen,
+		currentHero?.inventory?.weapons?.length,
 		state.heroes,
 	]);
 

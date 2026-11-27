@@ -17,6 +17,7 @@ import {
   runEnemyTurn,
   executeScavengeFallen,
   executePickUpBody,
+  executeSwitchWeapon,
 } from '../../../core/rules/TurnManager';
 
 import { createDefaultParty } from '../../../core/data/classes';
@@ -315,6 +316,8 @@ export function useCombatSession(config: CombatSessionConfig | EncounterType = '
       } else if (actionType === 'pickup_body') {
         const bodyId = prev.selectedTargetId;
         next = bodyId ? executePickUpBody(prev, bodyId) : prev;
+      } else if (actionType === 'switch_weapon') {
+        next = executeSwitchWeapon(prev);
       } else {
         next = executeHeroAttack(prev, encounterType);
       }

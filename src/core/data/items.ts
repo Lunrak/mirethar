@@ -113,9 +113,13 @@ export const ITEMS: Record<string, Item> = {
     id: 'bow',
     name: 'Arco',
     type: 'weapon',
-    slots: ['mainHand'],
-    tags: ['ranged', 'bow'],
-    rules: ['A distancia', 'Impide escudo / antorcha en off-hand'],
+    slots: ['mainHand', 'offHand'],
+    tags: ['ranged', 'bow', 'two-handed'],
+    rules: [
+      'A distancia',
+      'Requiere dos manos (como arma 2H para carga)',
+      'Impide escudo / antorcha en uso',
+    ],
   },
   sling: {
     id: 'sling',
