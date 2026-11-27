@@ -60,13 +60,16 @@ function occupied(
   return !!cells[cellKey(x, y)];
 }
 
-/** Casilla destino de una puerta está dentro del mapa */
+/**
+ * Tras una puerta hace falta 1 casilla de unión + 1 de cuerpo (gap).
+ * Comprueba que ambos pasos caben en el mapa 28×20.
+ */
 function doorTargetInBounds(x: number, y: number, dir: Dir): boolean {
   const { dx, dy } = DIR_DELTA[dir];
-  return inBounds(x + dx, y + dy);
+  return inBounds(x + dx, y + dy) && inBounds(x + dx * 2, y + dy * 2);
 }
 
-/** Filtra puertas de una celda que saldrían del tablero 28×20 */
+/** Filtra puertas de una celda que no tendrían hueco (unión + pieza) en el tablero */
 function filterDoorsInBounds(x: number, y: number, doors: Dir[]): Dir[] {
   return doors.filter((d) => doorTargetInBounds(x, y, d));
 }
@@ -257,16 +260,23 @@ export function openDoor(
   }
 
   const { dx, dy } = DIR_DELTA[door.dir];
-  const originX = from.x + dx;
-  const originY = from.y + dy;
+  /**
+   * Gap de 1 casilla entre piezas:
+   * - connector (unión) en from + 1·dir  → ahí “corre” la puerta
+   * - cuerpo de la nueva pieza en from + 2·dir
+   * Así salas/pasillos no se pegan; solo la unión las enlaza.
+   */
+  const gapX = from.x + dx;
+  const gapY = from.y + dy;
+  const originX = from.x + dx * 2;
+  const originY = from.y + dy * 2;
 
-  // Destino inmediato fuera del mapa → puerta bloqueada, buscar otro camino
-  if (!inBounds(originX, originY)) {
+  // Unión o primera casilla del cuerpo fuera del mapa → puerta bloqueada
+  if (!inBounds(gapX, gapY) || !inBounds(originX, originY)) {
     const doorsBlocked = {
       ...map.doors,
       [doorId]: { ...door, state: 'blocked' as const },
     };
-    // Quitar dirección de la celda origen
     const fromCell = { ...from, doors: from.doors.filter((d) => d !== door.dir) };
     return {
       map: {
@@ -279,8 +289,26 @@ export function openDoor(
     };
   }
 
+  // Si el hueco o el origen ya están ocupados, no se puede unir
+  if (occupied(map.cells, gapX, gapY) || occupied(map.cells, originX, originY)) {
+    const doorsBlocked = {
+      ...map.doors,
+      [doorId]: { ...door, state: 'blocked' as const },
+    };
+    const fromCell = { ...from, doors: from.doors.filter((d) => d !== door.dir) };
+    return {
+      map: {
+        ...map,
+        cells: { ...map.cells, [from.id]: fromCell },
+        doors: doorsBlocked,
+      },
+      newCellIds: [],
+      message: `No hay hueco libre tras la puerta (${door.dir}) para unir otra pieza. Buscad otro camino.`,
+    };
+  }
+
   const shape = rollShapeBeyondDoor(door.dir, rng);
-  // Si alguna casilla de la forma sale del mapa, reducir a lo que quepa; si no cabe ninguna, bloquear
+  // Cuerpo relativo al origen (2 casillas más allá de la puerta de origen)
   const absOffsets = shape.offsets
     .map((off) => ({
       ...off,
@@ -310,7 +338,7 @@ export function openDoor(
   const doors = { ...map.doors };
   const newCellIds: string[] = [];
   // Usar solo offsets que caben
-  shape.offsets = absOffsets.map(({ ax, ay, kind, doors: ds, x, y }) => ({
+  shape.offsets = absOffsets.map(({ ax, ay, kind, doors: ds }) => ({
     x: ax - originX,
     y: ay - originY,
     kind,
@@ -388,6 +416,22 @@ export function openDoor(
     const id = cellKey(x, y);
     if (occupied(cells, x, y)) continue;
     if (!inBounds(x, y)) continue;
+    // Evitar pegar el cuerpo a otra pieza (dejar al menos 1 casilla de aire salvo la unión)
+    let touchesForeign = false;
+    for (const d of ['N', 'E', 'S', 'W'] as Dir[]) {
+      const { dx: tdx, dy: tdy } = DIR_DELTA[d];
+      const tx = x + tdx;
+      const ty = y + tdy;
+      const tid = cellKey(tx, ty);
+      if (tid === cellKey(gapX, gapY)) continue; // la unión es el puente permitido
+      const other = cells[tid];
+      if (other?.revealed && other.regionId && other.regionId !== regionId) {
+        touchesForeign = true;
+        break;
+      }
+    }
+    if (touchesForeign) continue;
+
     regionKeys.add(id);
     let cell: MapCell = {
       id,
@@ -406,21 +450,61 @@ export function openDoor(
     newCellIds.push(id);
   }
 
+  // Si no quedó ni la casilla de entrada del cuerpo, abortar
+  const entryId = cellKey(originX, originY);
+  if (!cells[entryId]) {
+    const doorsBlocked = {
+      ...map.doors,
+      [doorId]: { ...door, state: 'blocked' as const },
+    };
+    const fromCell = { ...from, doors: from.doors.filter((d) => d !== door.dir) };
+    return {
+      map: {
+        ...map,
+        cells: { ...map.cells, [from.id]: fromCell },
+        doors: doorsBlocked,
+      },
+      newCellIds: [],
+      message: `La nueva pieza choca con otra (hace falta 1 casilla de hueco). Puerta al ${door.dir} bloqueada.`,
+    };
+  }
+
+  // Casilla de unión en el gap: ahí se “corre” la puerta que une las dos piezas
+  const gapId = cellKey(gapX, gapY);
+  const gapRegionId = uid('join');
+  if (!occupied(cells, gapX, gapY)) {
+    const gapCell: MapCell = {
+      id: gapId,
+      x: gapX,
+      y: gapY,
+      kind: 'corridor',
+      content: 'empty',
+      doors: [],
+      revealed: true,
+      label: 'unión',
+      regionId: gapRegionId,
+    };
+    cells[gapId] = gapCell;
+    newCellIds.push(gapId);
+  }
+
   // Puertas solo en el contorno de la pieza (hacia fuera), no entre casillas del mismo pasillo/sala
   for (const id of regionKeys) {
     const cell = cells[id];
     if (!cell) continue;
     const exteriorDirs: Dir[] = [];
     for (const dir of ['N', 'E', 'S', 'W'] as Dir[]) {
-      const { dx, dy } = DIR_DELTA[dir];
-      const nx = cell.x + dx;
-      const ny = cell.y + dy;
+      const { dx: edx, dy: edy } = DIR_DELTA[dir];
+      const nx = cell.x + edx;
+      const ny = cell.y + edy;
       const nid = cellKey(nx, ny);
       // Hacia otra casilla de la misma pieza → no hay puerta
       if (regionKeys.has(nid)) continue;
+      // Hacia la unión de entrada → no puerta nueva
+      if (nid === gapId) continue;
       // Fuera de mapa → no puerta
       if (!inBounds(nx, ny)) continue;
-      // Ya hay celda revelada de otra pieza → conexión abierta, sin puerta nueva
+      // Ya hay celda revelada de otra pieza → sin puerta nueva
       if (cells[nid]?.revealed) continue;
       exteriorDirs.push(dir);
     }
@@ -436,8 +520,7 @@ export function openDoor(
     cells[id] = { ...cell, doors: chosen };
   }
 
-  // La puerta de entrada (origen) ya conecta; no duplicar hacia atrás en la primera casilla
-  const entryId = cellKey(originX, originY);
+  // La puerta de entrada ya conecta vía la unión; no duplicar hacia atrás en la primera casilla
   if (cells[entryId]) {
     const back = OPPOSITE[door.dir];
     cells[entryId] = {
@@ -446,27 +529,35 @@ export function openDoor(
     };
   }
 
-    // Abrir puerta cuenta para misiones de cartografiar
+  // Abrir puerta cuenta para misiones de cartografiar
   quests = advanceAllQuests(quests, 'open_doors');
 
-  const firstId = cellKey(originX, originY);
-  // Marcar puerta como abierta y conectada
+  // La puerta original enlaza con la casilla de unión (gap); el cuerpo queda un paso más allá
+  const firstId = gapId;
   doors[doorId] = {
     ...door,
     state: 'open',
     leadsToCellId: cells[firstId]?.id ?? door.leadsToCellId,
   };
 
-  // Regenerar puertas explorables solo desde celdas nuevas (hacia vacío)
+  // Regenerar puertas explorables solo desde celdas nuevas (hacia vacío + hueco de 2)
+  // No crear puertas en la casilla de unión (solo es el puente)
   for (const cid of newCellIds) {
     const cell = cells[cid];
+    if (!cell || cell.regionId?.startsWith('join') || cell.label === 'unión') {
+      if (cell) cell.doors = [];
+      continue;
+    }
     cell.doors = filterDoorsInBounds(cell.x, cell.y, cell.doors);
     for (const dir of cell.doors) {
       const { dx: ddx, dy: ddy } = DIR_DELTA[dir];
       const nx = cell.x + ddx;
       const ny = cell.y + ddy;
-      if (!inBounds(nx, ny)) continue;
-      if (occupied(cells, nx, ny)) continue;
+      const nx2 = cell.x + ddx * 2;
+      const ny2 = cell.y + ddy * 2;
+      if (!inBounds(nx, ny) || !inBounds(nx2, ny2)) continue;
+      // Hace falta gap libre + primera casilla de cuerpo libre
+      if (occupied(cells, nx, ny) || occupied(cells, nx2, ny2)) continue;
       const exists = Object.values(doors).some(
         (d) => d.cellId === cell.id && d.dir === dir && !d.leadsToCellId,
       );
