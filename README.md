@@ -1,35 +1,209 @@
-# Mirethar - Motor de Reglas y Combate para Juego de Rol
+# Mirethar
 
-Un motor de reglas y combate para un juego de rol (RPG) de mesa, implementado como una aplicación móvil. Este proyecto es una demostración de arquitectura de software, lógica de negocio compleja y pruebas unitarias, llevando las mecánicas de un juego de rol a un entorno digital interactivo.
+Juego digital basado en **Four Against Darkness** (reglas revisadas del manual básico).  
+Stack: **React Native + Expo (TypeScript)** — núcleo de reglas en `src/core`, UI en `src/modules`.
 
-## 🎯 Propósito del Proyecto
+Este README resume el alcance del **manual básico 4AD** como lista de puntos a implementar, separada en **cumplidos** y **faltantes**, y cómo clonar y probar el proyecto.
 
-El objetivo principal fue crear un motor de reglas robusto y extensible para un sistema de combate de un juego de rol. El proyecto se centró en la correcta implementación de las mecánicas del juego (tiradas de dados, modificadores, turnos, estados) y en garantizar su correctitud a través de pruebas unitarias. Es un ejemplo de cómo estructurar lógica de negocio compleja en una aplicación móvil.
+---
 
-## ✨ Características Principales
+## Cumplidos (implementado)
 
-- **Motor de Combate**: Implementación de reglas de combate por turnos, incluyendo iniciativa, ataques, defensa, daño y habilidades especiales.
-- **Gestión de Personajes y Equipos**: Creación y gestión de personajes con sus atributos y equipamiento.
-- **Lógica de Dados**: Sistema de tiradas de dados con modificadores y reglas especiales.
-- **Interfaz de Usuario (UI)**: Interfaz en modo horizontal (landscape) que simula una mesa de juego, con un dado central y feedback visual para las acciones.
-- **Pruebas Unitarias**: El motor de reglas está cubierto por pruebas unitarias para asegurar que las mecánicas del juego funcionen según lo especificado.
+### Personajes y equipo
+- [x] Cuatro clases básicas: Guerrero, Pícaro, Clérigo, Mago (`classes.ts`, `createDefaultParty`)
+- [x] Equipo inicial y slots de equipo (`items.ts`, `equipmentOptions.ts`)
+- [x] Estados de héroe: vivo / herido / caído / muerto; cargar cadáver (`HeroStatus`, `BodyService`)
+- [x] Orden de marcha (frente / retaguardia) en combate
 
-## 🛠️ Stack Tecnológico
+### Dados y combate core
+- [x] Tirada d6 con **Explosive Six** (`DiceService`)
+- [x] Ataque: valor final vs level del monstruo; 1 siempre falla; daño por exceso en minions/vermin y heridas en bosses (`CombatResolver`)
+- [x] Defensa: armor/shield, modificadores de clase, natural 1/6 (`DefenseCalculator`)
+- [x] Modificadores 4AD: clase, arma a dos manos / ligera, undead, crushing vs skeletons, arrows, pasillo (`AttackModifiers`)
+- [x] Turnos: héroes en orden de marcha → turno enemigo automático → nueva ronda (`TurnManager`)
+- [x] Victoria / derrota por life 0; finalización de caídos al cerrar combate
+- [x] Distribución de ataques enemigos según número de monstruos vs héroes; bosses/weird a objetivo aleatorio (`assignEnemyAttackTargets`)
 
-- **Framework**: React Native con Expo
-- **Lenguaje**: TypeScript
-- **Pruebas**: Jest con `jest-expo`
-- **UI**: Componentes personalizados para simular dados y fichas de personaje.
+### Tablas de encuentros (manual básico)
+- [x] Vermin (d6) — `vermin.ts`
+- [x] Minions (d6) — `minions.ts`
+- [x] Bosses (d6) — `bosses.ts`
+- [x] Weird monsters (d6) — `weird.ts`
+- [x] Generación de encuentro por tipo y aleatoria (`EncounterGenerator`)
+- [x] Cantidades según fórmulas del manual
 
-## 🚀 Cómo Probar
+### Reacciones, moral y reglas especiales
+- [x] Tabla de reacciones por monstruo (`ReactionService`)
+- [x] Moral de minions (>½ bajas) y bosses (>½ life); monstruos que nunca tiran moral (`MoraleService`)
+- [x] Moral enganchada al aplicar daño en combate (`TurnManager` / `applyHeroAttack`)
+- [x] Bajada de level del boss al quedar por debajo de la mitad de life
+- [x] Regeneración de trolls (d6 5–6; bloqueo por hechizo / descuartizar)
+- [x] Reglas especiales parciales: aliento, Iron Eater, momia, veneno, cargo de minotauro, etc. (`SpecialRulesService`)
 
-1.  Clona el repositorio: `git clone https://github.com/Lunrak/mirethar.git`
-2.  Instala las dependencias: `npm install`
-3.  **Para jugar**: Inicia el servidor de desarrollo con `npx expo start` y abre la app en **Expo Go** (se recomienda un dispositivo físico en modo horizontal).
-4.  **Para ejecutar las pruebas**: Ejecuta `npm test` para correr la suite de pruebas unitarias del motor de reglas.
+### Habilidades y magia
+- [x] Curación del clérigo (usos limitados)
+- [x] Hechizos MVP: Fireball, Lightning Bolt, Sleep, Protect, Blessing, Escape (`AbilityResolver`, `spells.ts`)
 
-## 💡 Aspectos Técnicos a Destacar
+### Botín, XP y jefe final
+- [x] Botín simplificado por `treasureModifier` (`TreasureService`)
+- [x] XP: vermin 0, minion fracciones, boss/weird 1, jefe final 2 (`XpService`)
+- [x] Subida de nivel por gasto de XP (d6 > nivel; no el mismo héroe dos veces seguidas)
+- [x] Detección / combate de jefe final de mazmorra (`FinalBossService`)
+- [x] Soborno / claim de sala tras victoria (`BribeService`)
 
-- **Lógica de Negocio Compleja**: La implementación de un motor de reglas de un RPG demuestra la capacidad de modelar sistemas complejos con múltiples interacciones y estados.
-- **Testing y Calidad de Código**: La inclusión de Jest y `jest-expo` para probar el motor de reglas es un diferenciador clave. Demuestra un compromiso con la calidad del software y la corrección de la lógica de negocio.
-- **Arquitectura Limpia**: La separación entre la lógica del motor de reglas (testeable) y la interfaz de usuario (React Native) es un ejemplo de buenas prácticas de arquitectura de software.
+### Mazmorra procedural
+- [x] Entradas 1–6 y materialización en mapa (`entrances.ts`, `entranceRooms.ts`)
+- [x] Generación por etapas al abrir puertas (`DungeonGenerator`)
+- [x] Pack de salas d66 **11–66** con rejillas, puertas y rotación (`dungeonRooms.ts` + PNG)
+- [x] Contenidos de sala (tabla básica) (`roomContents.ts`, `RoomContentsService`)
+- [x] Tabla de quests (`questTable.ts`, `QuestService`)
+- [x] Vista de mapa local 7×9 con tiles floor/wall/puerta (`DungeonMapView`)
+- [x] Flujo App: menú → mazmorra ↔ combate de encuentro (`App.tsx`)
+
+### UI de combate
+- [x] Pantalla landscape con dado central, feedback y log
+- [x] Sprites de héroes y monstruos (idle / impacto / caído)
+- [x] Disposición tipo referencia: enemigos arriba, héroes abajo, **acciones como iconos** en franja central, **dado en esquina inferior**
+- [x] Setup de encuentro, resultados, level-up
+
+### Calidad
+- [x] Arquitectura modular `core` (reglas) vs `modules` (UI)
+- [x] Suites de test de reglas 4AD, turnos, habilidades, e2e boss, generador de mazmorra
+- [x] Criterios de aceptación GDD §10 documentados (`docs/ACCEPTANCE_DAY24.md`)
+
+---
+
+## Faltantes (pendiente respecto al manual básico 4AD)
+
+### Combate y flujo de encuentro
+- [ ] Forzar **reacción** al inicio de cada encuentro en el flow UI (servicio listo; no siempre se aplica antes del combate)
+- [ ] Combate en **pasillo** completo: solo posiciones 1–2 atacan cuerpo a cuerpo; 3–4 con a distancia / hechizos según manual
+- [ ] Armas a distancia: uso restringido al primer asalto / skirmish según reglas de sala vs pasillo
+- [ ] Excepción **HATE** (ataques extra siempre a la clase odiada) en la distribución de objetivos
+- [ ] Elección manual del jugador de quién se salva / recibe ataques extra (ahora heurística tank/front)
+
+### Tablas y botín
+- [ ] Tabla de tesoro **completa** del manual (objetos mágicos, oro detallado, excepciones por monstruo)
+- [ ] Persistencia real de inventario de party entre combates y salas (botín aún simplificado)
+- [ ] Todas las reglas especiales de cada entrada de tabla (texto del manual → lógica 100 % automatizada)
+
+### Mazmorra y exploración
+- [ ] Usar el pack **d66 11–66** al generar cada sala nueva (datos listos; acoplar a `DungeonGenerator` al abrir puerta)
+- [ ] Trampas, enigmas y features especiales con resolución interactiva completa
+- [ ] Mapa completo exportable / guardado de partida (save/load)
+- [ ] Clases y suplementos **fuera del manual básico** (Abyss, Netherworld, Twisted Minions, etc.) — fuera de alcance MVP
+
+### UI / producto
+- [ ] Iconos PNG de habilidades (ahora glifos Unicode)
+- [ ] Bloqueo de orientación landscape en la app host
+- [ ] Tutorial in-game de reglas 4AD
+- [ ] Audio / música
+- [ ] Multidioma (UI en español; textos de tablas aún mezclan EN del manual)
+
+---
+
+## Guía: descargar y probar el proyecto
+
+### Requisitos
+- Node.js 20+ (recomendado LTS)
+- npm o yarn
+- Expo CLI (`npx expo` basta)
+- Emulador Android/iOS **o** dispositivo con app **Expo Go**
+- Git
+
+### 1. Obtener el código
+
+Si trabajas desde el repositorio local del proyecto (carpeta de trabajo sincronizada):
+
+```bash
+cd /ruta/a/mirethar   # carpeta del proyecto (artifacts / repo)
+```
+
+Si clonas desde remoto (ajusta la URL cuando exista):
+
+```bash
+git clone <URL_DEL_REPO> mirethar
+cd mirethar
+```
+
+### 2. Instalar dependencias
+
+En la raíz del proyecto debe haber un `package.json` de Expo/React Native. Si aún no está en el árbol versionado, créalo con un template Expo y copia `src/`, `App.tsx` y `assets` dentro:
+
+```bash
+npx create-expo-app@latest . --template blank-typescript
+# luego asegura que App.tsx y src/ sean los de Mirethar
+npm install
+```
+
+Con el `package.json` ya presente:
+
+```bash
+npm install
+```
+
+### 3. Arrancar
+
+```bash
+npx expo start
+```
+
+- Pulsa `a` (Android), `i` (iOS) o escanea el QR con **Expo Go**.
+- Preferible **tablet o emulador en landscape**.
+
+### 4. Qué probar en el menú
+
+| Entrada | Qué verifica |
+|---------|----------------|
+| **Combate** | Setup vermin/minion/boss/weird → turnos, dado, iconos de acción, victoria/derrota |
+| **Mazmorra** | Entrada, mapa, abrir puertas, encuentros, vuelta al mapa tras combate |
+| **Level-up** | Tras acumular XP de bosses/minions, gastar XP en un héroe |
+
+Flujo mínimo sugerido:
+1. Mazmorra → explorar 2–3 salas.
+2. Resolver un combate de minions y uno de boss.
+3. Comprobar log, life, moral (huida posible) y XP.
+4. Volver al mapa y abrir otra puerta.
+
+### 5. Tests de reglas (sin UI)
+
+Desde la raíz, con el runner que uses en el repo (Jest / vitest según `package.json`):
+
+```bash
+npm test
+# o, si apuntas solo a core:
+npx jest src/core
+```
+
+Suites relevantes: `CombatRules4AD`, `TurnManager`, `AbilityResolver`, `DungeonGenerator`, `week2-e2e-boss`.
+
+### 6. Estructura útil
+
+```
+App.tsx                 # menú, mazmorra ↔ combate
+src/core/data/          # tablas 4AD, clases, items, salas
+src/core/rules/         # motor de reglas
+src/core/types/         # tipos combate / mazmorra
+src/modules/combat/     # UI combate
+src/modules/dungeon/    # UI mazmorra
+src/assets/             # sprites, dados, tiles de mapa
+docs/                   # GDD, PDFs del manual, aceptación
+```
+
+### 7. Notas
+
+- El núcleo de reglas es jugable y testeable **sin** depender de la UI.
+- Los PDF del manual en `docs/` son referencia de diseño; la implementación es una adaptación fiel al **manual básico**, no un suplemento completo.
+- PROGRESS.md histórico puede estar desfasado respecto a este README; **esta lista prevalece**.
+
+---
+
+## Referencias
+
+- *Four Against Darkness* – Revised rules (manual básico)
+- `docs/Mirethar_GDD_MVP.pdf` – diseño del MVP
+- `docs/ACCEPTANCE_DAY24.md` – criterios GDD §10
+
+---
+
+*Última actualización de este README: 2026-11-26*
