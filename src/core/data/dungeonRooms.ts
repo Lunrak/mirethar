@@ -28,51 +28,12 @@ export type DungeonRoom = {
   /** Filas top→bottom; '#' suelo, '.' hueco interior, espacio fuera */
   grid: string[];
   doors: RoomDoor[];
-  /** require() del PNG de la huella */
-  image: number;
+  /** require() del PNG de la huella (opcional; la generación usa solo grid) */
+  image?: number;
 };
 
-// Metro / Expo requires (ruta desde src/core/data/)
-const R = {
-  '11': require('../../assets/map/rooms/room_11.png'),
-  '12': require('../../assets/map/rooms/room_12.png'),
-  '13': require('../../assets/map/rooms/room_13.png'),
-  '14': require('../../assets/map/rooms/room_14.png'),
-  '15': require('../../assets/map/rooms/room_15.png'),
-  '16': require('../../assets/map/rooms/room_16.png'),
-  '21': require('../../assets/map/rooms/room_21.png'),
-  '22': require('../../assets/map/rooms/room_22.png'),
-  '23': require('../../assets/map/rooms/room_23.png'),
-  '24': require('../../assets/map/rooms/room_24.png'),
-  '25': require('../../assets/map/rooms/room_25.png'),
-  '26': require('../../assets/map/rooms/room_26.png'),
-  '31': require('../../assets/map/rooms/room_31.png'),
-  '32': require('../../assets/map/rooms/room_32.png'),
-  '33': require('../../assets/map/rooms/room_33.png'),
-  '34': require('../../assets/map/rooms/room_34.png'),
-  '35': require('../../assets/map/rooms/room_35.png'),
-  '36': require('../../assets/map/rooms/room_36.png'),
-  '41': require('../../assets/map/rooms/room_41.png'),
-  '42': require('../../assets/map/rooms/room_42.png'),
-  '43': require('../../assets/map/rooms/room_43.png'),
-  '44': require('../../assets/map/rooms/room_44.png'),
-  '45': require('../../assets/map/rooms/room_45.png'),
-  '46': require('../../assets/map/rooms/room_46.png'),
-  '51': require('../../assets/map/rooms/room_51.png'),
-  '52': require('../../assets/map/rooms/room_52.png'),
-  '53': require('../../assets/map/rooms/room_53.png'),
-  '54': require('../../assets/map/rooms/room_54.png'),
-  '55': require('../../assets/map/rooms/room_55.png'),
-  '56': require('../../assets/map/rooms/room_56.png'),
-  '61': require('../../assets/map/rooms/room_61.png'),
-  '62': require('../../assets/map/rooms/room_62.png'),
-  '63': require('../../assets/map/rooms/room_63.png'),
-  '64': require('../../assets/map/rooms/room_64.png'),
-  '65': require('../../assets/map/rooms/room_65.png'),
-  '66': require('../../assets/map/rooms/room_66.png'),
-} as const;
-
-export const CONTENT_SPRITE_ATLAS = require('../../assets/map/content_sprite_atlas.png');
+/** Geometría d66; los PNG son opcionales (no bloquean el bundle). */
+export const CONTENT_SPRITE_ATLAS: number | null = null;
 
 export const dungeonRooms: Record<string, DungeonRoom> = {
   '11': {
@@ -82,7 +43,6 @@ export const dungeonRooms: Record<string, DungeonRoom> = {
     kind: 'room',
     grid: ['###', '###', '###'],
     doors: [{ x: 1, y: 2, side: 'S' }],
-    image: R['11'],
   },
   '12': {
     id: '12',
@@ -91,7 +51,6 @@ export const dungeonRooms: Record<string, DungeonRoom> = {
     kind: 'room',
     grid: ['###', '#.#', '###'],
     doors: [{ x: 1, y: 2, side: 'S' }],
-    image: R['12'],
   },
   '13': {
     id: '13',
@@ -103,7 +62,6 @@ export const dungeonRooms: Record<string, DungeonRoom> = {
       { x: 1, y: 3, side: 'S' },
       { x: 4, y: 3, side: 'S' },
     ],
-    image: R['13'],
   },
   '14': {
     id: '14',
@@ -115,7 +73,6 @@ export const dungeonRooms: Record<string, DungeonRoom> = {
       { x: 0, y: 3, side: 'S' },
       { x: 2, y: 3, side: 'S' },
     ],
-    image: R['14'],
   },
   '15': {
     id: '15',
@@ -128,7 +85,6 @@ export const dungeonRooms: Record<string, DungeonRoom> = {
       { x: 4, y: 2, side: 'S' },
       { x: 0, y: 2, side: 'S' },
     ],
-    image: R['15'],
   },
   '16': {
     id: '16',
@@ -137,7 +93,6 @@ export const dungeonRooms: Record<string, DungeonRoom> = {
     kind: 'room',
     grid: ['.#.', '.#.', '.#.', '.#.', '###'],
     doors: [{ x: 2, y: 4, side: 'S' }],
-    image: R['16'],
   },
   '21': {
     id: '21',
@@ -146,7 +101,6 @@ export const dungeonRooms: Record<string, DungeonRoom> = {
     kind: 'room',
     grid: ['###', '###', '###'],
     doors: [{ x: 1, y: 2, side: 'S' }],
-    image: R['21'],
   },
   '22': {
     id: '22',
@@ -155,7 +109,6 @@ export const dungeonRooms: Record<string, DungeonRoom> = {
     kind: 'room',
     grid: ['###', '#.#', '###'],
     doors: [{ x: 1, y: 2, side: 'S' }],
-    image: R['22'],
   },
   '23': {
     id: '23',
@@ -167,7 +120,6 @@ export const dungeonRooms: Record<string, DungeonRoom> = {
       { x: 0, y: 0, side: 'S' },
       { x: 4, y: 2, side: 'S' },
     ],
-    image: R['23'],
   },
   '24': {
     id: '24',
@@ -179,7 +131,6 @@ export const dungeonRooms: Record<string, DungeonRoom> = {
       { x: 0, y: 3, side: 'S' },
       { x: 2, y: 3, side: 'S' },
     ],
-    image: R['24'],
   },
   '25': {
     id: '25',
@@ -191,7 +142,6 @@ export const dungeonRooms: Record<string, DungeonRoom> = {
       { x: 0, y: 1, side: 'S' },
       { x: 2, y: 1, side: 'S' },
     ],
-    image: R['25'],
   },
   '26': {
     id: '26',
@@ -200,7 +150,6 @@ export const dungeonRooms: Record<string, DungeonRoom> = {
     kind: 'room',
     grid: ['##', '##', '##'],
     doors: [{ x: 1, y: 2, side: 'S' }],
-    image: R['26'],
   },
   '31': {
     id: '31',
@@ -209,7 +158,6 @@ export const dungeonRooms: Record<string, DungeonRoom> = {
     kind: 'room',
     grid: ['###', '###', '###'],
     doors: [{ x: 1, y: 2, side: 'S' }],
-    image: R['31'],
   },
   '32': {
     id: '32',
@@ -221,7 +169,6 @@ export const dungeonRooms: Record<string, DungeonRoom> = {
       { x: 1, y: 2, side: 'S' },
       { x: 4, y: 2, side: 'S' },
     ],
-    image: R['32'],
   },
   '33': {
     id: '33',
@@ -233,7 +180,6 @@ export const dungeonRooms: Record<string, DungeonRoom> = {
       { x: 0, y: 3, side: 'S' },
       { x: 2, y: 3, side: 'S' },
     ],
-    image: R['33'],
   },
   '34': {
     id: '34',
@@ -242,7 +188,6 @@ export const dungeonRooms: Record<string, DungeonRoom> = {
     kind: 'room',
     grid: ['###', '#.#', '###'],
     doors: [{ x: 1, y: 2, side: 'S' }],
-    image: R['34'],
   },
   '35': {
     id: '35',
@@ -255,7 +200,6 @@ export const dungeonRooms: Record<string, DungeonRoom> = {
       { x: 4, y: 2, side: 'S' },
       { x: 4, y: 0, side: 'N' },
     ],
-    image: R['35'],
   },
   '36': {
     id: '36',
@@ -267,7 +211,6 @@ export const dungeonRooms: Record<string, DungeonRoom> = {
       { x: 0, y: 4, side: 'S' },
       { x: 2, y: 3, side: 'S' },
     ],
-    image: R['36'],
   },
   '41': {
     id: '41',
@@ -279,7 +222,6 @@ export const dungeonRooms: Record<string, DungeonRoom> = {
       { x: 0, y: 3, side: 'S' },
       { x: 2, y: 3, side: 'S' },
     ],
-    image: R['41'],
   },
   '42': {
     id: '42',
@@ -288,7 +230,6 @@ export const dungeonRooms: Record<string, DungeonRoom> = {
     kind: 'room',
     grid: ['##.', '##.', '##.', '###'],
     doors: [{ x: 0, y: 3, side: 'S' }],
-    image: R['42'],
   },
   '43': {
     id: '43',
@@ -297,7 +238,6 @@ export const dungeonRooms: Record<string, DungeonRoom> = {
     kind: 'room',
     grid: ['###', '###', '###'],
     doors: [{ x: 1, y: 2, side: 'S' }],
-    image: R['43'],
   },
   '44': {
     id: '44',
@@ -309,7 +249,6 @@ export const dungeonRooms: Record<string, DungeonRoom> = {
       { x: 1, y: 2, side: 'S' },
       { x: 3, y: 2, side: 'S' },
     ],
-    image: R['44'],
   },
   '45': {
     id: '45',
@@ -321,7 +260,6 @@ export const dungeonRooms: Record<string, DungeonRoom> = {
       { x: 2, y: 3, side: 'S' },
       { x: 0, y: 2, side: 'S' },
     ],
-    image: R['45'],
   },
   '46': {
     id: '46',
@@ -333,7 +271,6 @@ export const dungeonRooms: Record<string, DungeonRoom> = {
       { x: 0, y: 3, side: 'S' },
       { x: 2, y: 3, side: 'S' },
     ],
-    image: R['46'],
   },
   '51': {
     id: '51',
@@ -345,7 +282,6 @@ export const dungeonRooms: Record<string, DungeonRoom> = {
       { x: 0, y: 3, side: 'S' },
       { x: 2, y: 3, side: 'S' },
     ],
-    image: R['51'],
   },
   '52': {
     id: '52',
@@ -357,7 +293,6 @@ export const dungeonRooms: Record<string, DungeonRoom> = {
       { x: 1, y: 2, side: 'S' },
       { x: 3, y: 2, side: 'S' },
     ],
-    image: R['52'],
   },
   '53': {
     id: '53',
@@ -366,7 +301,6 @@ export const dungeonRooms: Record<string, DungeonRoom> = {
     kind: 'room',
     grid: ['###', '###'],
     doors: [{ x: 0, y: 1, side: 'S' }],
-    image: R['53'],
   },
   '54': {
     id: '54',
@@ -379,7 +313,6 @@ export const dungeonRooms: Record<string, DungeonRoom> = {
       { x: 4, y: 2, side: 'S' },
       { x: 4, y: 0, side: 'N' },
     ],
-    image: R['54'],
   },
   '55': {
     id: '55',
@@ -391,7 +324,6 @@ export const dungeonRooms: Record<string, DungeonRoom> = {
       { x: 0, y: 1, side: 'S' },
       { x: 2, y: 1, side: 'S' },
     ],
-    image: R['55'],
   },
   '56': {
     id: '56',
@@ -404,7 +336,6 @@ export const dungeonRooms: Record<string, DungeonRoom> = {
       { x: 1, y: 3, side: 'S' },
       { x: 4, y: 0, side: 'N' },
     ],
-    image: R['56'],
   },
   '61': {
     id: '61',
@@ -417,7 +348,6 @@ export const dungeonRooms: Record<string, DungeonRoom> = {
       { x: 0, y: 4, side: 'S' },
       { x: 1, y: 0, side: 'N' },
     ],
-    image: R['61'],
   },
   '62': {
     id: '62',
@@ -426,7 +356,6 @@ export const dungeonRooms: Record<string, DungeonRoom> = {
     kind: 'room',
     grid: ['###', '###', '###'],
     doors: [{ x: 1, y: 2, side: 'S' }],
-    image: R['62'],
   },
   '63': {
     id: '63',
@@ -435,7 +364,6 @@ export const dungeonRooms: Record<string, DungeonRoom> = {
     kind: 'corridor',
     grid: ['#', '#', '#', '#', '#'],
     doors: [{ x: 0, y: 4, side: 'S' }],
-    image: R['63'],
   },
   '64': {
     id: '64',
@@ -448,7 +376,6 @@ export const dungeonRooms: Record<string, DungeonRoom> = {
       { x: 0, y: 0, side: 'N' },
       { x: 2, y: 0, side: 'N' },
     ],
-    image: R['64'],
   },
   '65': {
     id: '65',
@@ -460,7 +387,6 @@ export const dungeonRooms: Record<string, DungeonRoom> = {
       { x: 0, y: 3, side: 'S' },
       { x: 2, y: 5, side: 'S' },
     ],
-    image: R['65'],
   },
   '66': {
     id: '66',
@@ -473,7 +399,6 @@ export const dungeonRooms: Record<string, DungeonRoom> = {
       { x: 2, y: 3, side: 'S' },
       { x: 0, y: 0, side: 'N' },
     ],
-    image: R['66'],
   },
 };
 

@@ -21,6 +21,7 @@ import {
 	type EncounterXpKind,
 } from './src/core/rules/XpService';
 import { LevelUpScreen } from './src/modules/combat';
+import { MobileStage } from './src/ui/MobileStage';
 
 type Mode = 'menu' | 'combat' | 'dungeon' | 'dungeonCombat' | 'levelUp';
 
@@ -164,87 +165,101 @@ export default function App() {
 			},
 		};
 		return (
-			<View style={{ flex: 1 }}>
-				<CombatScreen
-					key={combatKey}
-					config={config}
-					onCombatEnd={returnFromCombat}
-				/>
-			</View>
+			<MobileStage>
+				<View style={{ flex: 1 }}>
+					<CombatScreen
+						key={combatKey}
+						config={config}
+						onCombatEnd={returnFromCombat}
+					/>
+				</View>
+			</MobileStage>
 		);
 	}
 
 	if (mode === 'combat') {
 		return (
-			<View style={{ flex: 1 }}>
-				<CombatFlow />
-				<Pressable
-					style={styles.fab}
-					onPress={() => setMode('menu')}
-				>
-					<Text style={styles.fabText}>Menú</Text>
-				</Pressable>
-			</View>
+			<MobileStage>
+				<View style={{ flex: 1 }}>
+					<CombatFlow />
+					<Pressable
+						style={styles.fab}
+						onPress={() => setMode('menu')}
+					>
+						<Text style={styles.fabText}>Menú</Text>
+					</Pressable>
+				</View>
+			</MobileStage>
 		);
 	}
 
 	if (mode === 'levelUp') {
 		const fromMap = dungeonMap;
 		if (!fromMap) {
-			return null;
+			return (
+				<MobileStage>
+					<View style={{ flex: 1, backgroundColor: '#000' }} />
+				</MobileStage>
+			);
 		}
 		const party =
 			fromMap.partyHeroes && fromMap.partyHeroes.length > 0
 				? fromMap.partyHeroes
 				: [];
 		return (
-			<LevelUpScreen
-				heroes={party}
-				bank={fromMap.xpBank ?? emptyXpBank()}
-				onChange={(heroesNext, bankNext) => {
-					setDungeonMap({
-						...fromMap,
-						partyHeroes: heroesNext,
-						xpBank: bankNext,
-					});
-				}}
-				onClose={() => setMode('dungeon')}
-			/>
+			<MobileStage>
+				<LevelUpScreen
+					heroes={party}
+					bank={fromMap.xpBank ?? emptyXpBank()}
+					onChange={(heroesNext, bankNext) => {
+						setDungeonMap({
+							...fromMap,
+							partyHeroes: heroesNext,
+							xpBank: bankNext,
+						});
+					}}
+					onClose={() => setMode('dungeon')}
+				/>
+			</MobileStage>
 		);
 	}
 
 	if (mode === 'dungeon') {
 		return (
-			<DungeonScreen
-				onBack={() => {
-					setMode('menu');
-					setDungeonMap(null);
-				}}
-				initialMap={dungeonMap}
-				resumeLog={dungeonLog}
-				onEncounter={openDungeonCombat}
-				onOpenLevelUp={() => setMode('levelUp')}
-			/>
+			<MobileStage>
+				<DungeonScreen
+					onBack={() => {
+						setMode('menu');
+						setDungeonMap(null);
+					}}
+					initialMap={dungeonMap}
+					resumeLog={dungeonLog}
+					onEncounter={openDungeonCombat}
+					onOpenLevelUp={() => setMode('levelUp')}
+				/>
+			</MobileStage>
 		);
 	}
 
 	return (
-		<View style={styles.menu}>
-			<Text style={styles.title}>Mirethar</Text>
-			<Text style={styles.sub}>MVP · 4AD</Text>
-			<Pressable
-				style={styles.btn}
-				onPress={() => setMode('dungeon')}
-			>
-				<Text style={styles.btnText}>Explorar mazmorra</Text>
-			</Pressable>
-			<Pressable
-				style={styles.btn}
-				onPress={() => setMode('combat')}
-			>
-				<Text style={styles.btnText}>Combate (prueba)</Text>
-			</Pressable>
-		</View>
+		<MobileStage>
+			<View style={styles.menu}>
+				<Text style={styles.title}>Mirethar</Text>
+				<Text style={styles.sub}>MVP · 4AD</Text>
+				<Pressable
+					style={styles.btn}
+					onPress={() => setMode('dungeon')}
+				>
+					<Text style={styles.btnText}>Explorar mazmorra</Text>
+				</Pressable>
+				<Pressable
+					style={styles.btn}
+					onPress={() => setMode('combat')}
+				>
+					<Text style={styles.btnText}>Combate (prueba)</Text>
+				</Pressable>
+			</View>
+		</MobileStage>
 	);
 }
 
