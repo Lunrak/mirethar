@@ -121,7 +121,9 @@ export function combatReducer(state: CombatState, action: CombatAction): CombatS
         log: [
           createLogEntry(
             ambush
-              ? '¡Emboscada! Los enemigos atacan primero (solo frente de marcha).'
+              ? ambushFrontOnly
+                ? '¡Emboscada! Los enemigos atacan primero (solo frente de marcha).'
+                : 'Los enemigos actúan primero.'
               : 'Combate iniciado',
           ),
         ],
@@ -135,7 +137,8 @@ export function combatReducer(state: CombatState, action: CombatAction): CombatS
           return acc;
         }, {}),
         ambush: !!ambush,
-        ambushFrontOnly: !!(ambushFrontOnly ?? ambush),
+        // Solo restringir a frente si se pide explícitamente (o ambush clásico)
+        ambushFrontOnly: !!(ambushFrontOnly ?? false),
       };
       // Miradas Medusa / Catoblepas al inicio
       let opened = applyOpeningToCombatState(base);

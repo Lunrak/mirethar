@@ -35,6 +35,12 @@ import {
 	bodiesAtCell,
 } from '../../../core/rules/BodyService';
 import { dropBody } from '../../../core/rules/HeroStatus';
+import {
+	resolveReaction,
+	reactionStartsCombat,
+	reactionFlees,
+	reactionAllowsBribe,
+} from '../../../core/rules/ReactionService';
 
 import { DungeonMapView } from '../components/DungeonMapView';
 import {
@@ -53,7 +59,10 @@ type Props = {
 	onEncounter?: (payload: {
 		map: DungeonMap;
 		encounter: EncounterResult;
+		/** Emboscada real (revisitar): enemigos primero + solo frente */
 		ambush?: boolean;
+		/** Tras dialogar y pelear: enemigos primero, sin restricción de frente */
+		enemiesActFirst?: boolean;
 		log?: string[];
 	}) => void;
 };
@@ -72,6 +81,12 @@ export default function DungeonScreen({
 	const [pendingAmbush, setPendingAmbush] = useState(false);
 	const [questOffer, setQuestOffer] = useState<ActiveQuest | null>(null);
 	const [revealFlash, setRevealFlash] = useState<RevealFlash | null>(null);
+	/** Tras revelar criaturas: esperar a que el overlay termine antes de mostrar opciones */
+	const [revealDone, setRevealDone] = useState(true);
+	/** Última reacción de diálogo (mensaje en panel) */
+	const [lastReactionMsg, setLastReactionMsg] = useState<string | null>(null);
+	/** Si dialogaron y salió soborno, destacar opción de sobornar */
+	const [bribeFromReaction, setBribeFromReaction] = useState(false);
 
 	const start = (entranceId: number) => {
 		const m = createDungeon(entranceId);
@@ -79,6 +94,9 @@ export default function DungeonScreen({
 		setPendingEncounter(null);
 		setPendingAmbush(false);
 		setQuestOffer(null);
+		setRevealDone(true);
+		setLastReactionMsg(null);
+		setBribeFromReaction(false);
 		setLog([
 			`Entrada ${entranceId}: ${ENTRANCES.find((e) => e.id === entranceId)?.name}`,
 			'Tocad una puerta roja para explorar más allá.',
@@ -89,6 +107,8 @@ export default function DungeonScreen({
 		if (!map) return;
 		const result = openDoor(map, doorId);
 		setMap(result.map);
+		setLastReactionMsg(null);
+		setBribeFromReaction(false);
 		if (result.pendingEncounter) {
 			const label = `${result.pendingEncounter.template.name} ×${result.pendingEncounter.quantity}`;
 			const withDeal = ensureMonsterDeal(
@@ -105,11 +125,14 @@ export default function DungeonScreen({
 		}
 		setLog((prev) => [...prev, result.message].slice(-12));
 		if (result.revealWord) {
+			setRevealDone(false);
 			setRevealFlash({
 				id: `rev_${Date.now().toString(36)}`,
 				word: result.revealWord,
 				subtitle: result.revealSubtitle ?? undefined,
 			});
+		} else {
+			setRevealDone(true);
 		}
 	};
 
@@ -135,6 +158,9 @@ export default function DungeonScreen({
 			setMap(withDeal);
 			setPendingEncounter(result.ambush);
 			setPendingAmbush(true);
+			setLastReactionMsg(null);
+			setBribeFromReaction(false);
+			setRevealDone(true);
 		} else {
 			// Al entrar en casilla sobornada sin emboscada: actualizar demanda
 			const deal = result.map.cells[result.map.partyCellId]?.monsterDeal;
@@ -240,7 +266,10 @@ export default function DungeonScreen({
 
 			<DungeonRevealOverlay
 				flash={revealFlash}
-				onDone={() => setRevealFlash(null)}
+				onDone={() => {
+					setRevealFlash(null);
+					setRevealDone(true);
+				}}
 			/>
 			{map.adventureComplete && (
 				<View style={styles.completeBanner}>
@@ -454,7 +483,7 @@ export default function DungeonScreen({
 						</View>
 					) : null}
 
-					{pendingEncounter && (
+					{pendingEncounter && revealDone && (
 						<View style={styles.encBox}>
 							<Text style={styles.sideTitle}>¡Encuentro!</Text>
 							<Text style={styles.encText}>
@@ -470,34 +499,169 @@ export default function DungeonScreen({
 									marcha
 								</Text>
 							)}
+							{lastReactionMsg ? (
+								<Text style={styles.readyText}>{lastReactionMsg}</Text>
+							) : null}
 							{map.cells[map.partyCellId]?.monsterDeal && (
 								<Text style={styles.muted}>
 									{bribeDemandText(map.cells[map.partyCellId]!.monsterDeal!)}
 								</Text>
 							)}
-							<Pressable
-								style={styles.encBtn}
-								onPress={() => {
-									if (!pendingEncounter) return;
-									onEncounter?.({
-										map,
-										encounter: pendingEncounter,
-										ambush: pendingAmbush,
-										log,
-									});
-									setPendingEncounter(null);
-									setPendingAmbush(false);
-								}}
-							>
-								<Text style={styles.encBtnText}>
-									{pendingAmbush ? '¡Emboscada! Combatir' : 'Preparar combate'}
-								</Text>
-							</Pressable>
-							{map.cells[map.partyCellId]?.monsterDeal && (
+
+							{/* Emboscada real: solo combatir (sin diálogo) */}
+							{pendingAmbush ? (
+								<Pressable
+									style={styles.encBtn}
+									onPress={() => {
+										if (!pendingEncounter) return;
+										onEncounter?.({
+											map,
+											encounter: pendingEncounter,
+											ambush: true,
+											log,
+										});
+										setPendingEncounter(null);
+										setPendingAmbush(false);
+										setLastReactionMsg(null);
+										setBribeFromReaction(false);
+									}}
+								>
+									<Text style={styles.encBtnText}>¡Emboscada! Combatir</Text>
+								</Pressable>
+							) : (
+								<>
+									{/* 4AD: atacar de inmediato → héroes primero */}
+									<Pressable
+										style={styles.encBtn}
+										onPress={() => {
+											if (!pendingEncounter) return;
+											onEncounter?.({
+												map,
+												encounter: pendingEncounter,
+												ambush: false,
+												enemiesActFirst: false,
+												log: [
+													...log,
+													'Atacáis de inmediato: vuestra party actúa primero.',
+												],
+											});
+											setPendingEncounter(null);
+											setLastReactionMsg(null);
+											setBribeFromReaction(false);
+										}}
+									>
+										<Text style={styles.encBtnText}>Combatir</Text>
+									</Pressable>
+
+									{/* 4AD: esperar / dialogar → tirada de reacción */}
+									<Pressable
+										style={[
+											styles.encBtn,
+											{ marginTop: 6, borderColor: '#c9a227' },
+										]}
+										onPress={() => {
+											if (!pendingEncounter || !map) return;
+											const partySize =
+												map.partyHeroes?.filter(
+													(h) => !h.isDead && !h.isFallen && h.life > 0,
+												).length ?? 4;
+											const enemyCount = pendingEncounter.quantity;
+											const rr = resolveReaction(pendingEncounter.template);
+											setLastReactionMsg(rr.message);
+											setLog((prev) => [...prev, rr.message].slice(-12));
+
+											if (reactionFlees(rr.reaction, partySize, enemyCount)) {
+												setPendingEncounter(null);
+												setBribeFromReaction(false);
+												setLog((prev) =>
+													[...prev, 'Las criaturas huyen. Sin combate.'].slice(
+														-12,
+													),
+												);
+												return;
+											}
+
+											if (reactionStartsCombat(rr.reaction)) {
+												// No atacasteis de inmediato → enemigos primero
+												onEncounter?.({
+													map,
+													encounter: pendingEncounter,
+													ambush: false,
+													enemiesActFirst: true,
+													log: [
+														...log,
+														rr.message,
+														'Hostiles: los enemigos atacan primero.',
+													],
+												});
+												setPendingEncounter(null);
+												setBribeFromReaction(false);
+												setLastReactionMsg(null);
+												return;
+											}
+
+											if (reactionAllowsBribe(rr.reaction)) {
+												setBribeFromReaction(true);
+												setLog((prev) =>
+													[
+														...prev,
+														'Podéis intentar sobornarles o combatir de todos modos.',
+													].slice(-12),
+												);
+												return;
+											}
+
+											if (rr.reaction === 'quest') {
+												setLog((prev) =>
+													[
+														...prev,
+														'Proponen una tarea (revisad ofertas de quest si aparecen).',
+													].slice(-12),
+												);
+												return;
+											}
+
+											if (rr.reaction === 'sleeping') {
+												// Dormidos: héroes pueden atacar primero
+												onEncounter?.({
+													map,
+													encounter: pendingEncounter,
+													ambush: false,
+													enemiesActFirst: false,
+													log: [
+														...log,
+														rr.message,
+														'Están dormidos: atacáis primero.',
+													],
+												});
+												setPendingEncounter(null);
+												setBribeFromReaction(false);
+												setLastReactionMsg(null);
+												return;
+											}
+
+											// Reacciones no cubiertas: ofrecer combatir
+											setLog((prev) =>
+												[...prev, 'Podéis combatir o intentar sobornar.'].slice(
+													-12,
+												),
+											);
+										}}
+									>
+										<Text style={styles.encBtnText}>Dialogar</Text>
+									</Pressable>
+								</>
+							)}
+
+							{(map.cells[map.partyCellId]?.monsterDeal ||
+								bribeFromReaction) && (
 								<Pressable
 									style={[
 										styles.encBtn,
-										{ marginTop: 6, borderColor: '#6ea8fe' },
+										{
+											marginTop: 6,
+											borderColor: bribeFromReaction ? '#f0d78c' : '#6ea8fe',
+										},
 									]}
 									onPress={() => {
 										const r = payBribe(map, map.partyCellId);
@@ -506,6 +670,8 @@ export default function DungeonScreen({
 										if (r.ok) {
 											setPendingEncounter(null);
 											setPendingAmbush(false);
+											setBribeFromReaction(false);
+											setLastReactionMsg(null);
 										}
 									}}
 								>
@@ -517,13 +683,14 @@ export default function DungeonScreen({
 									</Text>
 								</Pressable>
 							)}
+
+							{/* Atajo de prueba / debug */}
 							<Pressable
 								style={[
 									styles.encBtn,
 									{ marginTop: 6, borderColor: '#5dce7a' },
 								]}
 								onPress={() => {
-									// Victoria: recuperar stash + loot normal simple (d6×5)
 									const normalGold = Math.floor(Math.random() * 6 + 1) * 5;
 									let next = noteEncounterCleared(map);
 									const claim = claimRoomAfterVictory(next, next.partyCellId, {
@@ -532,6 +699,8 @@ export default function DungeonScreen({
 									setMap(claim.map);
 									setPendingEncounter(null);
 									setPendingAmbush(false);
+									setBribeFromReaction(false);
+									setLastReactionMsg(null);
 									setLog((prev) =>
 										[
 											...prev,

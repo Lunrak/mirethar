@@ -28,6 +28,8 @@ type PendingDungeonCombat = {
 	map: DungeonMap;
 	encounter: EncounterResult;
 	ambush?: boolean;
+	/** Tras dialogar y reacción hostil: enemigos primero sin solo-frente */
+	enemiesActFirst?: boolean;
 	log: string[];
 };
 
@@ -43,6 +45,7 @@ export default function App() {
 			map: DungeonMap;
 			encounter: EncounterResult;
 			ambush?: boolean;
+			enemiesActFirst?: boolean;
 			log?: string[];
 		}) => {
 			let mapForCombat = payload.map;
@@ -59,6 +62,7 @@ export default function App() {
 				map: mapForCombat,
 				encounter: payload.encounter,
 				ambush: payload.ambush,
+				enemiesActFirst: payload.enemiesActFirst,
 				log: payload.log ?? dungeonLog,
 			});
 			setCombatKey((k) => k + 1);
@@ -146,6 +150,9 @@ export default function App() {
 			encounter: pending.encounter,
 			encounterType: pending.encounter.type,
 			ambush: pending.ambush,
+			enemiesActFirst: pending.enemiesActFirst,
+			// Solo emboscada real limita objetivos al frente de marcha
+			ambushFrontOnly: pending.ambush ? true : false,
 			positions: {
 				front: heroes.slice(0, 2).map((h) => h.id),
 				rear: heroes.slice(2).map((h) => h.id),

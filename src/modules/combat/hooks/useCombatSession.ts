@@ -37,8 +37,16 @@ export type CombatSessionConfig = {
   positions?: { front: string[]; rear: string[] };
   /** Si se pasa, se usa tal cual (incluye template del generador) */
   encounter?: EncounterResult;
-  /** Emboscada al revisitar: enemigos primero, solo frente */
+  /**
+   * Emboscada al revisitar: enemigos primero y solo 2 del frente.
+   * Si solo quieres enemigos primero (p. ej. tras dialogar y que peleen),
+   * usa `enemiesActFirst` sin `ambush`.
+   */
   ambush?: boolean;
+  /** Enemigos actúan antes que los héroes (reacción fight tras dialogar). */
+  enemiesActFirst?: boolean;
+  /** Solo frente de marcha puede ser objetivo (default true si ambush). */
+  ambushFrontOnly?: boolean;
 };
 
 export type CombatSession = {
@@ -178,21 +186,37 @@ function initFromConfig(config: CombatSessionConfig = {}): {
       : generateEncounter(encounterType));
   const enemies = config.enemies ?? encounter?.enemies ?? [];
   const positions = config.positions;
-  let state = createCombat(party, enemies, positions);
-  if (config.ambush) {
+  const enemiesFirst = !!(config.ambush || config.enemiesActFirst);
+  const frontOnly =
+    config.ambushFrontOnly ?? (config.ambush ? true : false);
+
+  let state = createCombat(party, enemies, positions, {
+    ambush: enemiesFirst,
+    ambushFrontOnly: frontOnly,
+  });
+
+  if (enemiesFirst) {
+    const msg = config.ambush
+      ? '¡Emboscada! Los enemigos atacan primero (solo frente de marcha).'
+      : 'Los enemigos reaccionan con hostilidad: atacan primero.';
     state = {
       ...state,
       phase: 'enemyTurn',
       currentActorId: null,
       ambush: true,
-      ambushFrontOnly: true,
+      ambushFrontOnly: frontOnly,
       log: [
         {
           id: `log_ambush_${Date.now().toString(36)}`,
-          message: '¡Emboscada! Los enemigos atacan primero (solo frente de marcha).',
+          message: msg,
           timestamp: Date.now(),
         },
-        ...state.log,
+        // evitar duplicar el mensaje genérico de createCombat
+        ...state.log.filter(
+          (l) =>
+            !l.message.includes('Emboscada') &&
+            l.message !== 'Combate iniciado',
+        ),
       ],
     };
   }
