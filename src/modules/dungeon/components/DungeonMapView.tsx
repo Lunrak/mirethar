@@ -1,7 +1,7 @@
 /**
- * Vista local de mazmorra: 7×9 casillas centradas en el grupo.
- * Usa tiles gráficos (floor / wall / door abierta|cerrada) de assets/map.
- * Las puertas cambian de sprite según Door.state.
+ * Vista local de mazmorra — niebla de guerra.
+ * Todo es oscuridad; al revelar se ve suelo, paredes y contenido.
+ * La lógica sigue en casillas, pero no se dibuja una rejilla de cuadrados.
  */
 
 import React, { useMemo } from 'react';
@@ -21,8 +21,9 @@ import {
 } from '../../../core/types/dungeon';
 import { MAP_TILES } from '../../../core/data/entranceRooms';
 
-const CELL = 40;
-const GAP = 2;
+/** Tamaño lógico de casilla (sin gap visual entre ellas). */
+const CELL = 44;
+const GAP = 0;
 const VIEW_H = 7;
 const VIEW_HALF_H = 3;
 const VIEW_W = 9;
@@ -66,6 +67,7 @@ function doorAt(map: DungeonMap, cellId: string, dir: Dir): Door | undefined {
 	);
 }
 
+/** Pared hacia oscuridad / borde de mapa (solo en casillas reveladas). */
 function wallToward(map: DungeonMap, x: number, y: number, dir: Dir): boolean {
 	const { dx, dy } = DIR_DELTA[dir];
 	const nx = x + dx;
@@ -76,6 +78,7 @@ function wallToward(map: DungeonMap, x: number, y: number, dir: Dir): boolean {
 	const door = Object.values(map.doors).find(
 		(d) => d.cellId === cellKey(x, y) && d.dir === dir,
 	);
+	// Hay puerta explorable → no dibujar muro sólido (se ve la puerta)
 	if (door && door.state !== 'blocked') return false;
 	return true;
 }
@@ -98,35 +101,28 @@ export function DungeonMapView({ map, onSelectCell, onOpenDoor }: Props) {
 		return list;
 	}, [originX, originY]);
 
-	const canvasW = VIEW_W * (CELL + GAP);
-	const canvasH = VIEW_H * (CELL + GAP);
+	const canvasW = VIEW_W * CELL;
+	const canvasH = VIEW_H * CELL;
 
 	return (
 		<View style={styles.wrap}>
 			<View style={[styles.canvas, { width: canvasW, height: canvasH }]}>
+				{/* Capa de oscuridad continua (sin rejilla) */}
+				<View style={styles.voidLayer} />
+
 				{tiles.map(({ x, y, vx, vy }) => {
 					const id = cellKey(x, y);
 					const cell = map.cells[id];
 					const inMap = inBounds(x, y);
 					const revealed = !!cell?.revealed;
 					const isParty = id === map.partyCellId;
-					const left = vx * (CELL + GAP);
-					const top = vy * (CELL + GAP);
+					const left = vx * CELL;
+					const top = vy * CELL;
 
-					// Fuera de mapa o niebla: muro
+					// Niebla: no dibujar casilla (queda el void negro)
 					if (!inMap || !revealed) {
-						return (
-							<View
-								key={`t_${x}_${y}`}
-								style={[styles.cell, { left, top }]}
-							>
-								<Image
-									source={MAP_TILES.wall}
-									style={styles.tileImg}
-									resizeMode="cover"
-								/>
-							</View>
-						);
+						// Solo el grupo podría estar en casilla no revelada en teoría: no
+						return null;
 					}
 
 					const doors: { dir: Dir; door: Door }[] = [];
@@ -146,28 +142,19 @@ export function DungeonMapView({ map, onSelectCell, onOpenDoor }: Props) {
 						<Pressable
 							key={id}
 							onPress={() => onSelectCell?.(id)}
-							style={[
-								styles.cell,
-								{
-									left,
-									top,
-									borderColor: isParty
-										? '#f0d78c'
-										: hasEnemy
-											? '#e55'
-											: '#2a2a32',
-									borderWidth: isParty || hasEnemy ? 2 : 1,
-								},
-							]}
+							style={[styles.cell, { left, top }]}
 						>
-							{/* Suelo de la casilla */}
 							<Image
 								source={MAP_TILES.floor}
 								style={styles.tileImg}
 								resizeMode="cover"
 							/>
 
-							{/* Glifo de contenido / grupo */}
+							{/* Oscurecido suave en uniones de pasillo */}
+							{cell.kind === 'corridor' || cell.label === 'unión' ? (
+								<View style={styles.corridorTint} />
+							) : null}
+
 							{symbol ? (
 								<Text
 									style={[
@@ -180,7 +167,7 @@ export function DungeonMapView({ map, onSelectCell, onOpenDoor }: Props) {
 								</Text>
 							) : null}
 
-							{/* Puertas: sprite abierto / cerrado según estado */}
+							{/* Puertas en el borde hacia la oscuridad */}
 							{doors.map(({ dir, door }) => {
 								const closed = door.state === 'closed' && !door.leadsToCellId;
 								const blocked = door.state === 'blocked';
@@ -202,7 +189,7 @@ export function DungeonMapView({ map, onSelectCell, onOpenDoor }: Props) {
 										disabled={!canOpen}
 										onPress={() => canOpen && onOpenDoor?.(door.id)}
 										style={[styles.doorMark, edge]}
-										hitSlop={6}
+										hitSlop={8}
 									>
 										{blocked ? (
 											<Text style={styles.blockedMark}>✕</Text>
@@ -217,7 +204,7 @@ export function DungeonMapView({ map, onSelectCell, onOpenDoor }: Props) {
 								);
 							})}
 
-							{/* Indicadores de muro hacia vacío no explorado */}
+							{/* Paredes hacia la niebla (silueta de la habitación) */}
 							{(['N', 'E', 'S', 'W'] as Dir[]).map((dir) => {
 								if (doorAt(map, id, dir)) return null;
 								if (!wallToward(map, x, y, dir)) return null;
@@ -236,17 +223,22 @@ export function DungeonMapView({ map, onSelectCell, onOpenDoor }: Props) {
 									/>
 								);
 							})}
+
+							{/* Halo del grupo */}
+							{isParty ? (
+								<View
+									style={styles.partyGlow}
+									pointerEvents="none"
+								/>
+							) : null}
 						</Pressable>
 					);
 				})}
 			</View>
 
 			<Text style={styles.legend}>
-				★ grupo · ⚔ enemigo · ◆ tesoro · puerta gráfica (abierta/cerrada) · hoja{' '}
-				{MAP_WIDTH}×{MAP_HEIGHT}
-			</Text>
-			<Text style={styles.coord}>
-				Vista centrada en ({px},{py})
+				Solo lo explorado es visible · ★ grupo · ⚔ amenaza · tocad puertas en el
+				borde
 			</Text>
 		</View>
 	);
@@ -258,84 +250,109 @@ const styles = StyleSheet.create({
 		alignItems: 'center',
 		justifyContent: 'center',
 		padding: 8,
+		backgroundColor: '#050508',
 	},
 	canvas: {
 		position: 'relative',
-		backgroundColor: '#0c0c10',
-		borderWidth: 2,
-		borderColor: '#3a3a45',
-		borderRadius: 8,
+		backgroundColor: '#000000',
+		borderRadius: 12,
 		overflow: 'hidden',
+		// Sin borde de “tablero de casillas”
+	},
+	voidLayer: {
+		position: 'absolute',
+		left: 0,
+		top: 0,
+		right: 0,
+		bottom: 0,
+		backgroundColor: '#000000',
 	},
 	cell: {
 		position: 'absolute',
 		width: CELL,
 		height: CELL,
-		borderRadius: 3,
 		overflow: 'hidden',
 		alignItems: 'center',
 		justifyContent: 'center',
+		// Sin border ni borderRadius: el suelo se une en un continuo
 	},
 	tileImg: {
-		...StyleSheet.absoluteFill,
+		position: 'absolute',
+		left: 0,
+		top: 0,
 		width: CELL,
 		height: CELL,
 	},
+	corridorTint: {
+		position: 'absolute',
+		left: 0,
+		top: 0,
+		right: 0,
+		bottom: 0,
+		backgroundColor: 'rgba(0,0,0,0.18)',
+	},
 	glyph: {
 		color: '#e8e4dc',
-		fontSize: 16,
+		fontSize: 17,
 		fontWeight: '800',
 		textShadowColor: '#000',
 		textShadowOffset: { width: 1, height: 1 },
-		textShadowRadius: 2,
+		textShadowRadius: 3,
 		zIndex: 3,
 	},
 	partyGlyph: {
-		color: '#f0d78c',
-		fontSize: 18,
+		color: '#f5e6a8',
+		fontSize: 20,
 	},
 	enemyGlyph: {
 		color: '#ff6b6b',
 	},
+	partyGlow: {
+		position: 'absolute',
+		left: 4,
+		top: 4,
+		right: 4,
+		bottom: 4,
+		borderRadius: 20,
+		borderWidth: 1.5,
+		borderColor: 'rgba(240,215,140,0.55)',
+		zIndex: 2,
+	},
 	doorMark: {
 		position: 'absolute',
 		zIndex: 5,
-		width: 22,
-		height: 22,
+		width: 24,
+		height: 24,
 	},
 	doorImg: {
-		width: 22,
-		height: 22,
-		borderRadius: 2,
+		width: 24,
+		height: 24,
 	},
 	blockedMark: {
-		color: '#888',
+		color: '#666',
 		fontSize: 14,
 		fontWeight: '900',
 		textAlign: 'center',
 	},
-	doorN: { top: 1, alignSelf: 'center', left: (CELL - 22) / 2 },
-	doorS: { bottom: 1, alignSelf: 'center', left: (CELL - 22) / 2 },
-	doorE: { right: 1, top: (CELL - 22) / 2 },
-	doorW: { left: 1, top: (CELL - 22) / 2 },
+	doorN: { top: 0, left: (CELL - 24) / 2 },
+	doorS: { bottom: 0, left: (CELL - 24) / 2 },
+	doorE: { right: 0, top: (CELL - 24) / 2 },
+	doorW: { left: 0, top: (CELL - 24) / 2 },
 	wallEdge: {
 		position: 'absolute',
-		backgroundColor: 'rgba(40,36,48,0.85)',
+		backgroundColor: '#1a1520',
 		zIndex: 2,
 	},
-	wallN: { top: 0, left: 0, right: 0, height: 4 },
-	wallS: { bottom: 0, left: 0, right: 0, height: 4 },
-	wallE: { right: 0, top: 0, bottom: 0, width: 4 },
-	wallW: { left: 0, top: 0, bottom: 0, width: 4 },
+	// Paredes un poco más gruesas para silueta legible en la niebla
+	wallN: { top: 0, left: 0, right: 0, height: 5 },
+	wallS: { bottom: 0, left: 0, right: 0, height: 5 },
+	wallE: { right: 0, top: 0, bottom: 0, width: 5 },
+	wallW: { left: 0, top: 0, bottom: 0, width: 5 },
 	legend: {
-		color: '#8a8680',
-		fontSize: 11,
-		marginTop: 8,
-		textAlign: 'center',
-	},
-	coord: {
 		color: '#5a5650',
-		fontSize: 10,
-		marginTop: 2,
+		fontSize: 11,
+		marginTop: 10,
+		textAlign: 'center',
+		maxWidth: 320,
 	},
 });
