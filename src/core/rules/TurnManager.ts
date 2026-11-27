@@ -48,6 +48,11 @@ import {
   ensureHeroInventory,
   equipWeapon,
 } from './InventoryService';
+import {
+  hateLogNote,
+  pickHatedBiasedTarget,
+  sortHeroesHateFirst,
+} from './HateService';
 import type {
   Action,
   CombatLogEntry,
@@ -388,14 +393,12 @@ export function executeHeroAttack(
  *
  * Minions / vermin (grupo):
  *  - menos monstruos que héroes → cada monstruo ataca a un héroe distinto
- *    (los que sobran no reciben ataque; preferencia: no front / menos tank)
  *  - igual número → 1 ataque por héroe
- *  - más monstruos → reparto equitativo; extras al front / más tank
+ *  - más monstruos → reparto equitativo; **ataques extra van primero a clases odiadas**
+ *    (undead→clérigo, orcos→elfo, goblins/trolls→enano)
  *
- * Boss / weird / final (criatura única con N ataques):
- *  - cada ataque elige un héroe al azar entre los vivos
- *  - si hay varios héroes se intenta no repetir hasta agotar el pool
- *    (p. ej. dragón: 2 ataques a 2 personajes aleatorios)
+ * Boss / weird / final:
+ *  - ataques sesgados hacia la clase odiada si está viva
  *
  * Devuelve lista ordenada (enemyId, attackIndex, heroId) para el turno.
  */
@@ -488,17 +491,16 @@ export function assignEnemyAttackTargets(
   const majors = alive.filter(isMajorEnemy);
   const minors = alive.filter((e) => !isMajorEnemy(e));
 
-  // --- Boss / weird / final: ataques al azar ---
+  // --- Boss / weird / final: sesgo hacia clase odiada ---
   for (const enemy of majors) {
     const n = Math.max(1, enemy.attacks ?? 1);
     const used = new Set<string>();
     for (let a = 0; a < n; a++) {
-      // Preferir héroes aún no elegidos este turno de esta criatura
-      let target = pickRandomHero(heroes, rng, used);
+      let target = pickHatedBiasedTarget(heroes, enemy, rng, used);
+      if (!target) target = pickRandomHero(heroes, rng, used);
       if (!target) target = pickRandomHero(heroes, rng);
       if (!target) break;
       used.add(target.id);
-      // Si ya se usaron todos, reiniciar pool para ataques restantes
       if (used.size >= heroes.length) used.clear();
       out.push({ enemyId: enemy.id, attackIndex: a, heroId: target.id });
     }
@@ -506,7 +508,6 @@ export function assignEnemyAttackTargets(
 
   // --- Minions / vermin: reparto por número de ataques totales ---
   if (minors.length > 0) {
-    // Cada minion aporta `attacks` slots (casi siempre 1)
     const slots: { enemyId: string; attackIndex: number }[] = [];
     for (const e of minors) {
       const n = Math.max(1, e.attacks ?? 1);
@@ -518,13 +519,22 @@ export function assignEnemyAttackTargets(
     const nM = slots.length;
     const nH = heroes.length;
 
-    // Orden de héroes para asignar extras / skips
-    const preferHit = sortHeroesForExtraHits(heroes, frontIds);
+    // Extras y prioridad de impacto: odio primero, luego tank/front
+    const preferHit = sortHeroesHateFirst(heroes, minors, (a, b) => {
+      const af = frontIds.includes(a.id) ? 0 : 1;
+      const bf = frontIds.includes(b.id) ? 0 : 1;
+      if (af !== bf) return af - bf;
+      return (b.maxLife ?? b.life) - (a.maxLife ?? a.life);
+    });
+    // Si no hay odio, cae al orden tank/front clásico
+    const preferHitFinal =
+      preferHit.length > 0 ? preferHit : sortHeroesForExtraHits(heroes, frontIds);
     const preferSkip = sortHeroesToSkip(heroes, frontIds);
 
     if (nM <= nH) {
-      // Cada monstruo (slot) a un héroe distinto; sobran héroes sin ataque
-      const targets = preferHit.slice(0, nM);
+      // Cada monstruo a un héroe distinto; odiados se incluyen si caben
+      // (preferHitFinal ya pone odiados al frente de la lista)
+      const targets = preferHitFinal.slice(0, nM);
       for (let i = 0; i < slots.length; i++) {
         out.push({
           enemyId: slots[i].enemyId,
@@ -533,31 +543,27 @@ export function assignEnemyAttackTargets(
         });
       }
     } else {
-      // Más ataques que héroes: base + extras
+      // Más ataques que héroes: 1 base a cada uno; extras a odiados primero
       const base = Math.floor(nM / nH);
       let extra = nM % nH;
-      // Cola de heroIds: base veces cada uno (orden preferHit), luego extras
       const queue: string[] = [];
-      for (const h of preferHit) {
+      for (const h of preferHitFinal) {
         for (let i = 0; i < base; i++) queue.push(h.id);
       }
-      for (const h of preferHit) {
+      for (const h of preferHitFinal) {
         if (extra <= 0) break;
         queue.push(h.id);
         extra--;
       }
-      // Asignar slots en orden de monstruos
       for (let i = 0; i < slots.length; i++) {
         out.push({
           enemyId: slots[i].enemyId,
           attackIndex: slots[i].attackIndex,
-          heroId: queue[i] ?? preferHit[i % preferHit.length].id,
+          heroId: queue[i] ?? preferHitFinal[i % preferHitFinal.length].id,
         });
       }
     }
 
-    // preferSkip no se usa en la lista final (solo documenta la regla de “quién se salva”);
-    // al coger preferHit.slice(0, nM) los de preferSkip quedan fuera automáticamente.
     void preferSkip;
   }
 
@@ -680,6 +686,11 @@ export function runEnemyTurn(
     frontIds,
     rng,
   });
+
+  const hateNote = hateLogNote(attackers, eligibleAfterBreath);
+  if (hateNote) {
+    logEntries.push(log(hateNote));
+  }
 
   // Ejecutar cada ataque asignado (en orden de monstruos)
   for (const asg of assignments) {

@@ -10,12 +10,14 @@ Este README resume el alcance del **manual básico 4AD** como lista de puntos a 
 ## Cumplidos (implementado)
 
 ### Personajes y equipo
+
 - [x] Cuatro clases básicas: Guerrero, Pícaro, Clérigo, Mago (`classes.ts`, `createDefaultParty`)
 - [x] Equipo inicial y slots de equipo (`items.ts`, `equipmentOptions.ts`)
 - [x] Estados de héroe: vivo / herido / caído / muerto; cargar cadáver (`HeroStatus`, `BodyService`)
 - [x] Orden de marcha (frente / retaguardia) en combate
 
 ### Dados y combate core
+
 - [x] Tirada d6 con **Explosive Six** (`DiceService`)
 - [x] Ataque: valor final vs level del monstruo; 1 siempre falla; daño por exceso en minions/vermin y heridas en bosses (`CombatResolver`)
 - [x] Defensa: armor/shield, modificadores de clase, natural 1/6 (`DefenseCalculator`)
@@ -25,6 +27,7 @@ Este README resume el alcance del **manual básico 4AD** como lista de puntos a 
 - [x] Distribución de ataques enemigos según número de monstruos vs héroes; bosses/weird a objetivo aleatorio (`assignEnemyAttackTargets`)
 
 ### Tablas de encuentros (manual básico)
+
 - [x] Vermin (d6) — `vermin.ts`
 - [x] Minions (d6) — `minions.ts`
 - [x] Bosses (d6) — `bosses.ts`
@@ -33,6 +36,7 @@ Este README resume el alcance del **manual básico 4AD** como lista de puntos a 
 - [x] Cantidades según fórmulas del manual
 
 ### Reacciones, moral y reglas especiales
+
 - [x] Tabla de reacciones por monstruo (`ReactionService`)
 - [x] Moral de minions (>½ bajas) y bosses (>½ life); monstruos que nunca tiran moral (`MoraleService`)
 - [x] Moral enganchada al aplicar daño en combate (`TurnManager` / `applyHeroAttack`)
@@ -41,10 +45,12 @@ Este README resume el alcance del **manual básico 4AD** como lista de puntos a 
 - [x] Reglas especiales parciales: aliento, Iron Eater, momia, veneno, cargo de minotauro, etc. (`SpecialRulesService`)
 
 ### Habilidades y magia
+
 - [x] Curación del clérigo (usos limitados)
 - [x] Hechizos MVP: Fireball, Lightning Bolt, Sleep, Protect, Blessing, Escape (`AbilityResolver`, `spells.ts`)
 
 ### Botín, XP y jefe final
+
 - [x] Botín simplificado por `treasureModifier` (`TreasureService`)
 - [x] XP: vermin 0, minion fracciones, boss/weird 1, jefe final 2 (`XpService`)
 - [x] Subida de nivel por gasto de XP (d6 > nivel; no el mismo héroe dos veces seguidas)
@@ -52,6 +58,7 @@ Este README resume el alcance del **manual básico 4AD** como lista de puntos a 
 - [x] Soborno / claim de sala tras victoria (`BribeService`)
 
 ### Mazmorra procedural
+
 - [x] Entradas 1–6 y materialización en mapa (`entrances.ts`, `entranceRooms.ts`)
 - [x] Generación por etapas al abrir puertas (`DungeonGenerator`)
 - [x] Pack de salas d66 **11–66** con rejillas, puertas y rotación (`dungeonRooms.ts` + PNG)
@@ -61,12 +68,14 @@ Este README resume el alcance del **manual básico 4AD** como lista de puntos a 
 - [x] Flujo App: menú → mazmorra ↔ combate de encuentro (`App.tsx`)
 
 ### UI de combate
+
 - [x] Pantalla landscape con dado central, feedback y log
 - [x] Sprites de héroes y monstruos (idle / impacto / caído)
 - [x] Disposición tipo referencia: enemigos arriba, héroes abajo, **acciones como iconos** en franja central, **dado en esquina inferior**
 - [x] Setup de encuentro, resultados, level-up
 
 ### Calidad
+
 - [x] Arquitectura modular `core` (reglas) vs `modules` (UI)
 - [x] Suites de test de reglas 4AD, turnos, habilidades, e2e boss, generador de mazmorra
 - [x] Criterios de aceptación GDD §10 documentados (`docs/ACCEPTANCE_DAY24.md`)
@@ -76,24 +85,28 @@ Este README resume el alcance del **manual básico 4AD** como lista de puntos a 
 ## Faltantes (pendiente respecto al manual básico 4AD)
 
 ### Combate y flujo de encuentro
+
 - [x] Forzar **reacción** al inicio de cada encuentro en el flow UI (servicio listo; no siempre se aplica antes del combate)
-- [ ] Combate en **pasillo** completo: solo posiciones 1–2 atacan cuerpo a cuerpo; 3–4 con a distancia / hechizos según manual
-- [ ] Armas a distancia: uso restringido al primer asalto / skirmish según reglas de sala vs pasillo
+- [x] Combate en **pasillo** completo: solo posiciones 1–2 atacan cuerpo a cuerpo; 3–4 con a distancia / hechizos según manual
+- [x] Armas a distancia: uso restringido al primer asalto / skirmish según reglas de sala vs pasillo
 - [ ] Excepción **HATE** (ataques extra siempre a la clase odiada) en la distribución de objetivos
 - [ ] Elección manual del jugador de quién se salva / recibe ataques extra (ahora heurística tank/front)
 
 ### Tablas y botín
+
 - [ ] Tabla de tesoro **completa** del manual (objetos mágicos, oro detallado, excepciones por monstruo)
 - [ ] Persistencia real de inventario de party entre combates y salas (botín aún simplificado)
 - [ ] Todas las reglas especiales de cada entrada de tabla (texto del manual → lógica 100 % automatizada)
 
 ### Mazmorra y exploración
+
 - [ ] Usar el pack **d66 11–66** al generar cada sala nueva (datos listos; acoplar a `DungeonGenerator` al abrir puerta)
 - [ ] Trampas, enigmas y features especiales con resolución interactiva completa
 - [ ] Mapa completo exportable / guardado de partida (save/load)
 - [ ] Clases y suplementos **fuera del manual básico** (Abyss, Netherworld, Twisted Minions, etc.) — fuera de alcance MVP
 
 ### UI / producto
+
 - [ ] Iconos PNG de habilidades (ahora glifos Unicode)
 - [ ] Bloqueo de orientación landscape en la app host
 - [ ] Tutorial in-game de reglas 4AD
@@ -105,6 +118,7 @@ Este README resume el alcance del **manual básico 4AD** como lista de puntos a 
 ## Guía: descargar y probar el proyecto
 
 ### Requisitos
+
 - Node.js 20+ (recomendado LTS)
 - npm o yarn
 - Expo CLI (`npx expo` basta)
@@ -153,13 +167,14 @@ npx expo start
 
 ### 4. Qué probar en el menú
 
-| Entrada | Qué verifica |
-|---------|----------------|
-| **Combate** | Setup vermin/minion/boss/weird → turnos, dado, iconos de acción, victoria/derrota |
-| **Mazmorra** | Entrada, mapa, abrir puertas, encuentros, vuelta al mapa tras combate |
-| **Level-up** | Tras acumular XP de bosses/minions, gastar XP en un héroe |
+| Entrada      | Qué verifica                                                                      |
+| ------------ | --------------------------------------------------------------------------------- |
+| **Combate**  | Setup vermin/minion/boss/weird → turnos, dado, iconos de acción, victoria/derrota |
+| **Mazmorra** | Entrada, mapa, abrir puertas, encuentros, vuelta al mapa tras combate             |
+| **Level-up** | Tras acumular XP de bosses/minions, gastar XP en un héroe                         |
 
 Flujo mínimo sugerido:
+
 1. Mazmorra → explorar 2–3 salas.
 2. Resolver un combate de minions y uno de boss.
 3. Comprobar log, life, moral (huida posible) y XP.
@@ -200,10 +215,10 @@ docs/                   # GDD, PDFs del manual, aceptación
 
 ## Referencias
 
-- *Four Against Darkness* – Revised rules (manual básico)
+- _Four Against Darkness_ – Revised rules (manual básico)
 - `docs/Mirethar_GDD_MVP.pdf` – diseño del MVP
 - `docs/ACCEPTANCE_DAY24.md` – criterios GDD §10
 
 ---
 
-*Última actualización de este README: 2026-11-26*
+_Última actualización de este README: 2026-11-26_
