@@ -141,10 +141,19 @@ export function materializeEntranceCells(
   def: EntranceDef,
 ): Record<string, MapCell> {
   const out: Record<string, MapCell> = {};
+  /** Misma etiqueta → misma región (toda la cámara / pasillo de la entrada). */
+  const labelToRegion = new Map<string, string>();
   for (const raw of def.cells) {
     const { x, y } = relToAbs(raw.rx, raw.ry);
     if (!inBounds(x, y)) continue;
     const id = cellKey(x, y);
+    const labelKey = raw.label ?? raw.kind;
+    if (!labelToRegion.has(labelKey)) {
+      labelToRegion.set(
+        labelKey,
+        `entrance_${def.id}_${labelKey.replace(/\s+/g, '_')}`,
+      );
+    }
     out[id] = {
       id,
       x,
@@ -155,6 +164,7 @@ export function materializeEntranceCells(
       revealed: true,
       isEntrance: raw.isEntrance,
       label: raw.label,
+      regionId: labelToRegion.get(labelKey),
     };
   }
   return out;
