@@ -99,6 +99,11 @@ export type DungeonMap = {
   partyHeroes?: import('./combat').Hero[];
   /** Banco de XP del grupo */
   xpBank?: import('../rules/XpService').XpBank;
+  /**
+   * Emboscada al reexplorar: una sola tirada por regionId
+   * (solo si la región no tiene contenido fijado).
+   */
+  regionAmbushDone?: Record<string, boolean>;
 };
 
 export type GenerateResult = {

@@ -764,8 +764,39 @@ export type RevisitResult = {
 };
 
 /**
- * Al revisitar un pasillo/cuarto ya explorado: d6; con 1 → minions en emboscada.
- * Los enemigos atacan primero y solo al frente de marcha (reglas de combate).
+ * Contenido “fijado” en la región: encuentro pendiente, tesoro, trampa, etc.
+ * Si hay algo pendiente, no se tira emboscada al volver.
+ */
+export function regionHasFixedContent(
+  map: DungeonMap,
+  regionId: string | undefined,
+): boolean {
+  if (!regionId) return false;
+  if (regionId.startsWith('join')) return false;
+  for (const c of Object.values(map.cells)) {
+    if (c.regionId !== regionId) continue;
+    if (
+      c.content === 'encounter' ||
+      c.content === 'treasure' ||
+      c.content === 'trap' ||
+      c.content === 'special' ||
+      c.content === 'stairs_down' ||
+      c.content === 'unknown'
+    ) {
+      return true;
+    }
+    if (c.monsterDeal && !c.monsterDeal.bribed) {
+      // trato pendiente / combate no resuelto
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
+ * Al reentrar en un pasillo/cuarto ya explorado (otra región), sin contenido fijado
+ * y sin haber tirado aún en esa región: d6; con 1 → minions en emboscada.
+ * Una sola vez por regionId.
  */
 export function rollRevisitAmbush(
   rng?: () => number,
@@ -774,7 +805,7 @@ export function rollRevisitAmbush(
   if (roll !== 1) {
     return {
       ambush: null,
-      message: `Reexploráis la zona (d6=${roll}): sin encuentro.`,
+      message: `Reexploráis la zona (d6=${roll}): sin emboscada.`,
     };
   }
   const encounter = generateEncounter('minion', rng ?? Math.random);
@@ -797,7 +828,7 @@ export function movePartyTo(
       map,
       revisited: false,
       ambush: null,
-      message: 'Casilla no revelada.',
+      message: 'Zona no explorada.',
     };
   }
   if (cellId === map.partyCellId) {
@@ -809,9 +840,74 @@ export function movePartyTo(
     };
   }
 
-  const nextMap = { ...map, partyCellId: cellId };
-  // Volver a casilla ya explorada (no es la primera visita generada en este paso)
+  const from = map.cells[map.partyCellId];
+  const fromRegion = from?.regionId;
+  const toRegion = cell.regionId;
+
+  // Moverse dentro de la misma habitación/pasillo: sin emboscada
+  if (fromRegion && toRegion && fromRegion === toRegion) {
+    return {
+      map: { ...map, partyCellId: cellId },
+      revisited: false,
+      ambush: null,
+      message: 'Os movéis por la misma zona.',
+    };
+  }
+
+  // Uniones (gap): no cuentan como pieza para emboscada
+  const isJoin =
+    !toRegion ||
+    toRegion.startsWith('join') ||
+    cell.label === 'unión';
+
+  let nextMap: DungeonMap = { ...map, partyCellId: cellId };
+
+  if (isJoin) {
+    return {
+      map: nextMap,
+      revisited: false,
+      ambush: null,
+      message: 'Pasáis la unión entre piezas.',
+    };
+  }
+
+  // Solo emboscada al ENTRAR en otra región ya revelada, una vez, sin contenido fijado
+  const ambushDone = map.regionAmbushDone?.[toRegion!] === true;
+  const fixed = regionHasFixedContent(map, toRegion);
+
+  if (ambushDone || fixed || cell.kind === 'entrance') {
+    return {
+      map: nextMap,
+      revisited: true,
+      ambush: null,
+      message: fixed
+        ? 'Volvéis a una zona con contenido aún pendiente.'
+        : ambushDone
+          ? 'Reexploráis la zona (emboscada ya comprobada).'
+          : 'Volvéis a la entrada.',
+    };
+  }
+
   const { ambush, message } = rollRevisitAmbush(rng);
+  nextMap = {
+    ...nextMap,
+    regionAmbushDone: {
+      ...(map.regionAmbushDone ?? {}),
+      [toRegion!]: true,
+    },
+  };
+
+  // Si hay emboscada, marcar encuentro en todas las casillas de la región
+  if (ambush && toRegion) {
+    const cells = { ...nextMap.cells };
+    for (const [id, c] of Object.entries(cells)) {
+      if (c.regionId === toRegion) {
+        cells[id] = { ...c, content: 'encounter' };
+      }
+    }
+    nextMap = { ...nextMap, cells };
+  }
+
   return {
     map: nextMap,
     revisited: true,

@@ -1,7 +1,8 @@
 /**
  * Vista local de mazmorra — niebla de guerra.
  * Todo es oscuridad; al revelar se ve suelo, paredes y contenido.
- * La lógica sigue en casillas, pero no se dibuja una rejilla de cuadrados.
+ * El grupo se indica resaltando las paredes de toda la región actual
+ * (no un marcador en una sola casilla).
  */
 
 import React, { useMemo } from 'react';
@@ -21,9 +22,7 @@ import {
 } from '../../../core/types/dungeon';
 import { MAP_TILES } from '../../../core/data/entranceRooms';
 
-/** Tamaño lógico de casilla (sin gap visual entre ellas). */
 const CELL = 44;
-const GAP = 0;
 const VIEW_H = 7;
 const VIEW_HALF_H = 3;
 const VIEW_W = 9;
@@ -47,9 +46,8 @@ function clampViewOrigin(
 	return origin;
 }
 
-function cellSymbol(c: MapCell | undefined, isParty: boolean): string {
-	if (isParty) return '★';
-	if (!c || !c.revealed) return '';
+function contentSymbol(c: MapCell): string {
+	if (!c.revealed) return '';
 	if (c.monsterDeal && (c.monsterDeal.bribed || c.content === 'encounter'))
 		return '⚔';
 	if (c.content === 'encounter') return '⚔';
@@ -57,7 +55,6 @@ function cellSymbol(c: MapCell | undefined, isParty: boolean): string {
 	if (c.content === 'trap') return '!';
 	if (c.content === 'stairs_down') return '↓';
 	if (c.content === 'special') return '?';
-	if (c.kind === 'entrance') return 'E';
 	return '';
 }
 
@@ -67,7 +64,6 @@ function doorAt(map: DungeonMap, cellId: string, dir: Dir): Door | undefined {
 	);
 }
 
-/** Pared hacia oscuridad / borde de mapa (solo en casillas reveladas). */
 function wallToward(map: DungeonMap, x: number, y: number, dir: Dir): boolean {
 	const { dx, dy } = DIR_DELTA[dir];
 	const nx = x + dx;
@@ -78,15 +74,35 @@ function wallToward(map: DungeonMap, x: number, y: number, dir: Dir): boolean {
 	const door = Object.values(map.doors).find(
 		(d) => d.cellId === cellKey(x, y) && d.dir === dir,
 	);
-	// Hay puerta explorable → no dibujar muro sólido (se ve la puerta)
 	if (door && door.state !== 'blocked') return false;
 	return true;
+}
+
+function regionCellIds(
+	map: DungeonMap,
+	regionId: string | undefined,
+): Set<string> {
+	const set = new Set<string>();
+	if (!regionId) {
+		if (map.partyCellId) set.add(map.partyCellId);
+		return set;
+	}
+	for (const c of Object.values(map.cells)) {
+		if (c.regionId === regionId && c.revealed) set.add(c.id);
+	}
+	if (set.size === 0 && map.partyCellId) set.add(map.partyCellId);
+	return set;
 }
 
 export function DungeonMapView({ map, onSelectCell, onOpenDoor }: Props) {
 	const party = map.cells[map.partyCellId];
 	const px = party?.x ?? Math.floor(MAP_WIDTH / 2);
 	const py = party?.y ?? MAP_HEIGHT - 1;
+	const partyRegionId = party?.regionId;
+	const activeRegion = useMemo(
+		() => regionCellIds(map, partyRegionId),
+		[map, partyRegionId],
+	);
 
 	const originX = clampViewOrigin(px, VIEW_HALF_W, MAP_WIDTH, VIEW_W);
 	const originY = clampViewOrigin(py, VIEW_HALF_H, MAP_HEIGHT, VIEW_H);
@@ -107,7 +123,6 @@ export function DungeonMapView({ map, onSelectCell, onOpenDoor }: Props) {
 	return (
 		<View style={styles.wrap}>
 			<View style={[styles.canvas, { width: canvasW, height: canvasH }]}>
-				{/* Capa de oscuridad continua (sin rejilla) */}
 				<View style={styles.voidLayer} />
 
 				{tiles.map(({ x, y, vx, vy }) => {
@@ -115,13 +130,11 @@ export function DungeonMapView({ map, onSelectCell, onOpenDoor }: Props) {
 					const cell = map.cells[id];
 					const inMap = inBounds(x, y);
 					const revealed = !!cell?.revealed;
-					const isParty = id === map.partyCellId;
+					const inPartyRegion = activeRegion.has(id);
 					const left = vx * CELL;
 					const top = vy * CELL;
 
-					// Niebla: no dibujar casilla (queda el void negro)
 					if (!inMap || !revealed) {
-						// Solo el grupo podría estar en casilla no revelada en teoría: no
 						return null;
 					}
 
@@ -135,8 +148,7 @@ export function DungeonMapView({ map, onSelectCell, onOpenDoor }: Props) {
 						cell.content === 'encounter' ||
 						!!cell.monsterDeal ||
 						cell.content === 'trap';
-
-					const symbol = cellSymbol(cell, isParty);
+					const symbol = contentSymbol(cell);
 
 					return (
 						<Pressable
@@ -150,24 +162,18 @@ export function DungeonMapView({ map, onSelectCell, onOpenDoor }: Props) {
 								resizeMode="cover"
 							/>
 
-							{/* Oscurecido suave en uniones de pasillo */}
 							{cell.kind === 'corridor' || cell.label === 'unión' ? (
 								<View style={styles.corridorTint} />
 							) : null}
 
+							{inPartyRegion ? <View style={styles.regionFloorTint} /> : null}
+
 							{symbol ? (
-								<Text
-									style={[
-										styles.glyph,
-										isParty && styles.partyGlyph,
-										hasEnemy && styles.enemyGlyph,
-									]}
-								>
+								<Text style={[styles.glyph, hasEnemy && styles.enemyGlyph]}>
 									{symbol}
 								</Text>
 							) : null}
 
-							{/* Puertas en el borde hacia la oscuridad */}
 							{doors.map(({ dir, door }) => {
 								const closed = door.state === 'closed' && !door.leadsToCellId;
 								const blocked = door.state === 'blocked';
@@ -204,7 +210,6 @@ export function DungeonMapView({ map, onSelectCell, onOpenDoor }: Props) {
 								);
 							})}
 
-							{/* Paredes hacia la niebla (silueta de la habitación) */}
 							{(['N', 'E', 'S', 'W'] as Dir[]).map((dir) => {
 								if (doorAt(map, id, dir)) return null;
 								if (!wallToward(map, x, y, dir)) return null;
@@ -219,25 +224,21 @@ export function DungeonMapView({ map, onSelectCell, onOpenDoor }: Props) {
 								return (
 									<View
 										key={`w_${dir}`}
-										style={[styles.wallEdge, edge]}
+										style={[
+											styles.wallEdge,
+											edge,
+											inPartyRegion && styles.wallEdgeActive,
+										]}
 									/>
 								);
 							})}
-
-							{/* Halo del grupo */}
-							{isParty ? (
-								<View
-									style={styles.partyGlow}
-									pointerEvents="none"
-								/>
-							) : null}
 						</Pressable>
 					);
 				})}
 			</View>
 
 			<Text style={styles.legend}>
-				Solo lo explorado es visible · ★ grupo · ⚔ amenaza · tocad puertas en el
+				Habitación actual: paredes doradas · ⚔ amenaza · tocad puertas en el
 				borde
 			</Text>
 		</View>
@@ -257,7 +258,6 @@ const styles = StyleSheet.create({
 		backgroundColor: '#000000',
 		borderRadius: 12,
 		overflow: 'hidden',
-		// Sin borde de “tablero de casillas”
 	},
 	voidLayer: {
 		position: 'absolute',
@@ -274,7 +274,6 @@ const styles = StyleSheet.create({
 		overflow: 'hidden',
 		alignItems: 'center',
 		justifyContent: 'center',
-		// Sin border ni borderRadius: el suelo se une en un continuo
 	},
 	tileImg: {
 		position: 'absolute',
@@ -291,6 +290,14 @@ const styles = StyleSheet.create({
 		bottom: 0,
 		backgroundColor: 'rgba(0,0,0,0.18)',
 	},
+	regionFloorTint: {
+		position: 'absolute',
+		left: 0,
+		top: 0,
+		right: 0,
+		bottom: 0,
+		backgroundColor: 'rgba(240, 210, 120, 0.07)',
+	},
 	glyph: {
 		color: '#e8e4dc',
 		fontSize: 17,
@@ -300,23 +307,8 @@ const styles = StyleSheet.create({
 		textShadowRadius: 3,
 		zIndex: 3,
 	},
-	partyGlyph: {
-		color: '#f5e6a8',
-		fontSize: 20,
-	},
 	enemyGlyph: {
 		color: '#ff6b6b',
-	},
-	partyGlow: {
-		position: 'absolute',
-		left: 4,
-		top: 4,
-		right: 4,
-		bottom: 4,
-		borderRadius: 20,
-		borderWidth: 1.5,
-		borderColor: 'rgba(240,215,140,0.55)',
-		zIndex: 2,
 	},
 	doorMark: {
 		position: 'absolute',
@@ -343,7 +335,9 @@ const styles = StyleSheet.create({
 		backgroundColor: '#1a1520',
 		zIndex: 2,
 	},
-	// Paredes un poco más gruesas para silueta legible en la niebla
+	wallEdgeActive: {
+		backgroundColor: '#c9a84c',
+	},
 	wallN: { top: 0, left: 0, right: 0, height: 5 },
 	wallS: { bottom: 0, left: 0, right: 0, height: 5 },
 	wallE: { right: 0, top: 0, bottom: 0, width: 5 },
@@ -353,6 +347,6 @@ const styles = StyleSheet.create({
 		fontSize: 11,
 		marginTop: 10,
 		textAlign: 'center',
-		maxWidth: 320,
+		maxWidth: 340,
 	},
 });
