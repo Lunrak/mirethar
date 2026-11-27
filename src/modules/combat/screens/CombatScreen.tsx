@@ -150,7 +150,18 @@ export default function CombatScreen({
 	};
 
 	const actionsDisabled =
-		state.phase !== 'heroTurn' || state.isFinished || diceUi === 'spinning';
+		state.phase !== 'heroTurn' ||
+		state.isFinished ||
+		diceUi === 'spinning' ||
+		diceUi === 'result';
+
+	/** Ocultar poderes hasta que termine la animación de resolución */
+	const showActionPanel =
+		!state.isFinished &&
+		state.phase === 'heroTurn' &&
+		diceUi !== 'spinning' &&
+		diceUi !== 'result' &&
+		!lastFeedback;
 
 	return (
 		<View style={styles.root}>
@@ -224,21 +235,23 @@ export default function CombatScreen({
 				/>
 			</View>
 
-			{/* Acciones = franja central de iconos (SkillBar de la referencia) */}
-			<View
-				style={styles.skillBand}
-				pointerEvents="box-none"
-			>
-				<ActionPanel
-					layout="icons"
-					actions={actions}
-					selected={state.selectedAction}
-					disabled={actionsDisabled}
-					currentHero={currentHero}
-					targetAutoSelected={targetAutoSelected}
-					onSelect={selectHeroAction}
-				/>
-			</View>
+			{/* Acciones: solo en turno de héroe y fuera de animación */}
+			{showActionPanel ? (
+				<View
+					style={styles.skillBand}
+					pointerEvents="box-none"
+				>
+					<ActionPanel
+						layout="icons"
+						actions={actions}
+						selected={state.selectedAction}
+						disabled={actionsDisabled}
+						currentHero={currentHero}
+						targetAutoSelected={targetAutoSelected}
+						onSelect={selectHeroAction}
+					/>
+				</View>
+			) : null}
 
 			<View
 				style={styles.logSlot}
