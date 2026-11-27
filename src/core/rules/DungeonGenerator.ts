@@ -5,6 +5,13 @@
  */
 
 import { ENTRANCES, getEntrance, materializeEntranceCells } from '../data/entrances';
+import {
+  dungeonRooms,
+  rotateRoom,
+  rollRoomId,
+  type DungeonRoom,
+  type RoomDoor,
+} from '../data/dungeonRooms';
 import type {
   Dir,
   Door,
@@ -137,76 +144,86 @@ export type ShapeRoll = {
 };
 
 /**
- * Tirada de forma al abrir una puerta (inspirada en generación por etapas 4AD).
- * 1–2 pasillo corto, 3–4 pasillo largo, 5 sala, 6 sala con más salidas.
+ * New Set of Rooms (d66): orienta la pieza para que una puerta mire
+ * hacia atrás (OPPOSITE[through]) y se acople al vano abierto.
+ */
+function orientRoomToEntrance(
+  room: DungeonRoom,
+  through: Dir,
+): { room: DungeonRoom; door: RoomDoor } | null {
+  const needSide = OPPOSITE[through];
+  for (let turns = 0; turns < 4; turns++) {
+    const rotated = rotateRoom(room, turns);
+    const candidates = rotated.doors.filter((d) => d.side === needSide);
+    if (candidates.length > 0) {
+      // Preferir puerta centrada en el lado
+      const sorted = [...candidates].sort((a, b) => a.x + a.y - (b.x + b.y));
+      return { room: rotated, door: sorted[Math.floor(sorted.length / 2)] };
+    }
+  }
+  return null;
+}
+
+/** Convierte una DungeonRoom orientada en offsets relativos a la celda de entrada. */
+export function dungeonRoomToShape(
+  room: DungeonRoom,
+  connect: RoomDoor,
+): ShapeRoll {
+  const doorsByCell = new Map<string, Dir[]>();
+  for (const d of room.doors) {
+    if (d.x === connect.x && d.y === connect.y && d.side === connect.side) {
+      continue; // la entrada ya está unida
+    }
+    const k = `${d.x},${d.y}`;
+    const list = doorsByCell.get(k) ?? [];
+    list.push(d.side);
+    doorsByCell.set(k, list);
+  }
+
+  const offsets: ShapeRoll['offsets'] = [];
+  for (let y = 0; y < room.height; y++) {
+    const row = room.grid[y] ?? '';
+    for (let x = 0; x < room.width; x++) {
+      if (row[x] !== '#') continue;
+      offsets.push({
+        x: x - connect.x,
+        y: y - connect.y,
+        kind: room.kind as CellKind,
+        doors: doorsByCell.get(`${x},${y}`) ?? [],
+      });
+    }
+  }
+
+  const isCorridor = room.kind === 'corridor' || room.width === 1 || room.height === 1;
+  return {
+    kind: isCorridor && room.width === 1 ? 'corridor' : room.kind === 'corridor' ? 'corridor' : 'room',
+    label:
+      room.kind === 'corridor' || room.width === 1
+        ? `pasillo ${room.id}`
+        : `sala ${room.id}`,
+    offsets,
+  };
+}
+
+/**
+ * Tirada d66 del New Set of Rooms al abrir una puerta.
+ * Rota la pieza para acoplarla al vano; si falla, reintenta.
  */
 export function rollShapeBeyondDoor(
   through: Dir,
   rng?: () => number,
 ): ShapeRoll {
-  const roll = rollD6(rng);
-  const forward = through;
-  const back = OPPOSITE[through];
-  const left: Dir =
-    through === 'N' ? 'W' : through === 'S' ? 'E' : through === 'E' ? 'N' : 'S';
-  const right: Dir = OPPOSITE[left];
-  const F = DIR_DELTA[forward];
-  const L = DIR_DELTA[left];
-  const R = DIR_DELTA[right];
-
-  if (roll <= 2) {
-    // Pasillo 1×1
-    return {
-      kind: 'corridor',
-      label: 'pasillo corto',
-      offsets: [
-        { x: 0, y: 0, kind: 'corridor', doors: [back, forward] },
-      ],
-    };
+  for (let attempt = 0; attempt < 16; attempt++) {
+    const id = rollRoomId(rollD6(rng), rollD6(rng));
+    const base = dungeonRooms[id];
+    if (!base) continue;
+    const oriented = orientRoomToEntrance(base, through);
+    if (!oriented) continue;
+    const shape = dungeonRoomToShape(oriented.room, oriented.door);
+    if (shape.offsets.length > 0) return shape;
   }
-  if (roll <= 4) {
-    // Pasillo 1×3
-    return {
-      kind: 'corridor',
-      label: 'pasillo',
-      offsets: [
-        { x: 0, y: 0, kind: 'corridor', doors: [back, forward] },
-        { x: F.dx, y: F.dy, kind: 'corridor', doors: [back, forward] },
-        { x: F.dx * 2, y: F.dy * 2, kind: 'corridor', doors: [back, forward] },
-      ],
-    };
-  }
-  if (roll === 5) {
-    // Sala 2×2
-    return {
-      kind: 'room',
-      label: 'sala 2×2',
-      offsets: [
-        { x: 0, y: 0, kind: 'room', doors: [back, left] },
-        { x: L.dx, y: L.dy, kind: 'room', doors: [back, right, forward] },
-        { x: F.dx, y: F.dy, kind: 'room', doors: [back, forward, left] },
-        {
-          x: F.dx + L.dx,
-          y: F.dy + L.dy,
-          kind: 'room',
-          doors: [forward, right],
-        },
-      ],
-    };
-  }
-  // 6 – sala 3×2
-  return {
-    kind: 'room',
-    label: 'sala 3×2',
-    offsets: [
-      { x: 0, y: 0, kind: 'room', doors: [back] },
-      { x: L.dx, y: L.dy, kind: 'room', doors: [back, left] },
-      { x: R.dx, y: R.dy, kind: 'room', doors: [back, right] },
-      { x: F.dx, y: F.dy, kind: 'room', doors: [forward] },
-      { x: F.dx + L.dx, y: F.dy + L.dy, kind: 'room', doors: [forward, left] },
-      { x: F.dx + R.dx, y: F.dy + R.dy, kind: 'room', doors: [forward, right] },
-    ],
-  };
+  // Respaldo mínimo si el pack no pudo orientarse
+  return minimalCorridorShape(through);
 }
 
 /** Rota offsets: el (0,0) del shape está en la celda al otro lado de la puerta */
@@ -554,6 +571,7 @@ export function openDoor(
   }
 
   // Casillas de la pieza (viabilidad ya comprobada: todas libres y en mapa)
+  // Puertas según el diagrama New Set (off.doors), no inventadas al azar
   const regionKeys = new Set<string>();
   for (const off of shape.offsets) {
     const { x, y } = worldPos(originX, originY, off.x, off.y);
@@ -565,13 +583,13 @@ export function openDoor(
       y,
       kind: off.kind,
       content: 'unknown',
-      doors: [],
+      doors: [...(off.doors ?? [])],
       revealed: true,
       label: shape.label,
       regionId,
     };
     cell = applyContentToCell(cell, resolved);
-    cell = { ...cell, regionId, label: shape.label };
+    cell = { ...cell, regionId, label: shape.label, doors: [...(off.doors ?? [])] };
     cells[id] = cell;
     newCellIds.push(id);
   }
@@ -607,39 +625,26 @@ export function openDoor(
     newCellIds.push(gapId);
   }
 
-  // Puertas solo en el contorno de la pieza (hacia fuera), no entre casillas del mismo pasillo/sala
+  // Validar puertas del diagrama: solo hacia vacío / no hacia la misma pieza ni la unión
   for (const id of regionKeys) {
     const cell = cells[id];
     if (!cell) continue;
-    const exteriorDirs: Dir[] = [];
-    for (const dir of ['N', 'E', 'S', 'W'] as Dir[]) {
+    const valid: Dir[] = [];
+    for (const dir of cell.doors ?? []) {
       const { dx: edx, dy: edy } = DIR_DELTA[dir];
       const nx = cell.x + edx;
       const ny = cell.y + edy;
       const nid = cellKey(nx, ny);
-      // Hacia otra casilla de la misma pieza → no hay puerta
       if (regionKeys.has(nid)) continue;
-      // Hacia la unión de entrada → no puerta nueva
       if (nid === gapId) continue;
-      // Fuera de mapa → no puerta
       if (!inBounds(nx, ny)) continue;
-      // Ya hay celda revelada de otra pieza → sin puerta nueva
       if (cells[nid]?.revealed) continue;
-      exteriorDirs.push(dir);
+      valid.push(dir);
     }
-    // Limitar salidas: pasillo suele 1 hacia adelante; salas hasta 2–3
-    const maxDoors =
-      shapeKind === 'corridor' ? 1 : exteriorDirs.length > 3 ? 3 : exteriorDirs.length;
-    // Preferir dirección "forward" (la de la puerta de origen)
-    const preferred = door.dir;
-    exteriorDirs.sort((a, b) =>
-      a === preferred ? -1 : b === preferred ? 1 : 0,
-    );
-    const chosen = exteriorDirs.slice(0, Math.max(0, maxDoors));
-    cells[id] = { ...cell, doors: chosen };
+    cells[id] = { ...cell, doors: valid };
   }
 
-  // La puerta de entrada ya conecta vía la unión; no duplicar hacia atrás en la primera casilla
+  // La puerta de entrada ya conecta vía la unión; no duplicar hacia atrás
   if (cells[entryId]) {
     const back = OPPOSITE[door.dir];
     cells[entryId] = {
